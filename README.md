@@ -33,6 +33,10 @@ npm run test
 npm run build
 ```
 
+## Install the test release with BRAT
+
+In BRAT, choose **Add a beta plugin for testing**, enter `luna-jmy/ob-workspace`, install the latest release, then enable **Custom Workspace** in Obsidian's Community plugins settings.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
