@@ -21,7 +21,7 @@ describe("metric aggregation", () => {
     const result = aggregateMetrics([
       { path: "a.md", words: 0, ctime: 100, outgoing: 0, incoming: 0 },
       { path: "b.md", words: 20, ctime: 200, outgoing: 2, incoming: 1 }
-    ], 3, 2, 200, 1, 10);
+    ], ["a.png", "b.pdf", "c.canvas"], ["one", "two"], 200, 1, 10);
     expect(result).toMatchObject({ notes: 2, attachments: 3, folders: 2, words: 20, links: 2 });
     expect(result.orphanPaths).toEqual(["a.md"]); expect(result.shortPaths).toEqual(["a.md"]);
   });
@@ -58,7 +58,7 @@ describe("layout", () => {
     { id: "a", componentId: "x", span: 4, params: {} }, { id: "b", componentId: "x", span: 6, params: {} }
   ];
   it("moves within bounds", () => { expect(moveBlock(blocks, 0, 1).map((item) => item.id)).toEqual(["b", "a"]); expect(moveBlock(blocks, 0, -1)).toEqual(blocks); });
-  it("cycles width within bounds", () => { expect(cycleSpan(4, 1)).toBe(6); expect(cycleSpan(12, 1)).toBe(12); });
+  it("cycles all four width options within bounds", () => { expect(cycleSpan(3, 1)).toBe(4); expect(cycleSpan(4, 1)).toBe(6); expect(cycleSpan(12, 1)).toBe(12); });
 });
 
 describe("history", () => {

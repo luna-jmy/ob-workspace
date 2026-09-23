@@ -1,5 +1,5 @@
 export type ParamValue = string | number | boolean | ParamValue[] | { [key: string]: ParamValue };
-export type BlockSpan = 4 | 6 | 12;
+export type BlockSpan = 3 | 4 | 6 | 12;
 
 export interface Block {
   id: string;
@@ -89,7 +89,7 @@ export function migrateData(value: unknown): CustomWorkspaceData {
 
 function isBlock(value: unknown): value is Block {
   return isRecord(value) && typeof value.id === "string" && typeof value.componentId === "string"
-    && [4, 6, 12].includes(Number(value.span)) && isRecord(value.params);
+    && [3, 4, 6, 12].includes(Number(value.span)) && isRecord(value.params);
 }
 
 function isSnapshot(value: unknown): value is DailySnapshot {

@@ -1,6 +1,6 @@
 import type { Block, BlockSpan } from "../types";
 
-export const SPANS: BlockSpan[] = [4, 6, 12];
+export const SPANS: BlockSpan[] = [3, 4, 6, 12];
 export function moveBlock(blocks: Block[], index: number, offset: -1 | 1): Block[] {
   const target = index + offset;
   if (index < 0 || index >= blocks.length || target < 0 || target >= blocks.length) return [...blocks];

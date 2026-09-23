@@ -6,6 +6,7 @@ import { renderFilenamePattern } from "../params/parser";
 import { t } from "../i18n";
 import { runScript } from "../services/script-runner";
 import { moment } from "../services/date";
+import { DetailModal } from "../ui/detail-modal";
 
 function paramString(value: ParamValue | undefined, fallback = ""): string {
   return typeof value === "string" || typeof value === "number" || typeof value === "boolean" ? String(value) : fallback;
@@ -20,33 +21,38 @@ export interface ComponentDefinition {
   render(container: HTMLElement, block: Block, host: Component, plugin: CustomWorkspacePlugin): Promise<void>;
 }
 
-function metric(container: HTMLElement, label: string, value: number, paths: string[], plugin: CustomWorkspacePlugin): void {
+const STAT_KEYS = ["notes", "attachments", "folders", "recent", "words", "links", "orphans", "empty"] as const;
+export type StatKey = typeof STAT_KEYS[number];
+export const STAT_LABELS: Record<StatKey, string> = {
+  notes: "笔记", attachments: "附件", folders: "文件夹", recent: "最近新增", words: "可读字数", links: "链接", orphans: "孤立笔记", empty: "空笔记"
+};
+export function selectedStats(value: ParamValue | undefined): StatKey[] {
+  if (!Array.isArray(value)) return [...STAT_KEYS];
+  const selected = value.filter((item): item is StatKey => typeof item === "string" && STAT_KEYS.includes(item as StatKey));
+  return selected.length ? selected : [...STAT_KEYS];
+}
+
+function metric(container: HTMLElement, label: string, value: number, paths: string[], plugin: CustomWorkspacePlugin, host: Component): void {
   const button = container.createEl("button", { cls: "cw-metric" });
   button.createSpan({ cls: "cw-metric__value", text: value.toLocaleString() });
   button.createSpan({ cls: "cw-metric__label", text: label });
-  if (paths.length) button.addEventListener("click", () => showPaths(container, paths, plugin));
-}
-
-function showPaths(container: HTMLElement, paths: string[], plugin: CustomWorkspacePlugin): void {
-  const existing = container.querySelector(".cw-detail");
-  existing?.remove();
-  const list = container.createDiv({ cls: "cw-detail" });
-  for (const path of paths.slice(0, 100)) {
-    const item = list.createEl("button", { text: path, cls: "cw-link-button" });
-    item.addEventListener("click", () => { const file = plugin.index.find(path); if (file) void plugin.app.workspace.getLeaf(false).openFile(file); });
-  }
+  if (paths.length) { button.addClass("is-clickable"); host.registerDomEvent(button, "click", () => new DetailModal(plugin.app, label, paths, plugin).open()); }
 }
 
 const vaultStats: ComponentDefinition = {
   id: "builtin/vault-stats", name: "仓库统计", icon: "database", description: "", params: [],
-  async render(container, _block, _host, plugin) {
+  async render(container, block, host, plugin) {
     const data = await plugin.index.metrics(); await plugin.recordHistory(data);
     const grid = container.createDiv({ cls: "cw-metrics" });
-    metric(grid, t("笔记"), data.notes, [], plugin); metric(grid, t("附件"), data.attachments, [], plugin);
-    metric(grid, t("文件夹"), data.folders, [], plugin); metric(grid, t("最近新增"), data.recent, [], plugin);
-    metric(grid, t("可读字数"), data.words, [], plugin); metric(grid, t("链接"), data.links, [], plugin);
-    metric(grid, t("孤立笔记"), data.orphanPaths.length, data.orphanPaths, plugin);
-    metric(grid, t("空笔记"), data.emptyPaths.length, data.emptyPaths, plugin);
+    const selected = selectedStats(block.params.items);
+    if (selected.includes("notes")) metric(grid, t("笔记"), data.notes, data.notePaths, plugin, host);
+    if (selected.includes("attachments")) metric(grid, t("附件"), data.attachments, data.attachmentPaths, plugin, host);
+    if (selected.includes("folders")) metric(grid, t("文件夹"), data.folders, data.folderPaths, plugin, host);
+    if (selected.includes("recent")) metric(grid, t("最近新增"), data.recent, data.recentPaths, plugin, host);
+    if (selected.includes("words")) metric(grid, t("可读字数"), data.words, data.notePaths, plugin, host);
+    if (selected.includes("links")) metric(grid, t("链接"), data.links, data.linkedPaths, plugin, host);
+    if (selected.includes("orphans")) metric(grid, t("孤立笔记"), data.orphanPaths.length, data.orphanPaths, plugin, host);
+    if (selected.includes("empty")) metric(grid, t("空笔记"), data.emptyPaths.length, data.emptyPaths, plugin, host);
   }
 };
 
@@ -88,20 +94,43 @@ const commandButtons: ComponentDefinition = {
 
 const health: ComponentDefinition = {
   id: "builtin/note-health", name: "笔记健康度", icon: "heart-pulse", description: "", params: [],
-  async render(container, _block, _host, plugin) {
+  async render(container, _block, host, plugin) {
     const data = await plugin.index.metrics(); const grid = container.createDiv({ cls: "cw-metrics" });
-    metric(grid, t("孤立笔记"), data.orphanPaths.length, data.orphanPaths, plugin);
-    metric(grid, t("空笔记"), data.emptyPaths.length, data.emptyPaths, plugin);
-    metric(grid, t("短笔记"), data.shortPaths.length, data.shortPaths, plugin);
+    metric(grid, t("孤立笔记"), data.orphanPaths.length, data.orphanPaths, plugin, host);
+    metric(grid, t("空笔记"), data.emptyPaths.length, data.emptyPaths, plugin, host);
+    metric(grid, t("短笔记"), data.shortPaths.length, data.shortPaths, plugin, host);
   }
 };
 
 const graph: ComponentDefinition = {
-  id: "builtin/graph", name: "知识图谱", icon: "git-fork", description: "", params: [],
-  async render(container, _block, _host, plugin) {
-    if (!plugin.commands.available()) { unavailable(container, t("命令接口不可用")); return; }
-    const button = container.createEl("button", { text: t("打开"), cls: "mod-cta" });
-    button.addEventListener("click", () => plugin.commands.execute("graph:open"));
+  id: "builtin/graph", name: "知识图谱", icon: "git-fork", description: "", params: [{ key: "file", type: "note", defaultValue: "" }],
+  async render(container, block, host, plugin) {
+    const resolved = plugin.app.metadataCache.resolvedLinks;
+    const configured = paramString(block.params.file); let active = configured ? plugin.index.find(configured) : plugin.app.workspace.getActiveFile();
+    if (!active) {
+      const degrees = new Map<string, number>();
+      for (const [source, targets] of Object.entries(resolved)) {
+        degrees.set(source, (degrees.get(source) ?? 0) + Object.keys(targets).length);
+        for (const [target, count] of Object.entries(targets)) degrees.set(target, (degrees.get(target) ?? 0) + count);
+      }
+      const rootPath = [...degrees.entries()].sort((a, b) => b[1] - a[1])[0]?.[0]; active = rootPath ? plugin.index.find(rootPath) : null;
+    }
+    if (!active) { unavailable(container, t("仓库里还没有可预览的链接关系")); return; }
+    const outgoing = Object.keys(resolved[active.path] ?? {});
+    const incoming = Object.entries(resolved).filter(([, targets]) => active.path in targets).map(([path]) => path);
+    const paths = [...new Set([...outgoing, ...incoming])].filter((path) => path !== active.path).slice(0, 12);
+    const preview = container.createDiv({ cls: "cw-graph-preview" });
+    const lines = preview.createSvg("svg", { cls: "cw-graph-preview__lines", attr: { viewBox: "0 0 100 100", preserveAspectRatio: "none", "aria-hidden": "true" } });
+    const center = preview.createEl("button", { text: active.basename, cls: "cw-graph-node cw-graph-node--center" });
+    host.registerDomEvent(center, "click", () => void plugin.app.workspace.getLeaf(false).openFile(active));
+    paths.forEach((path, index) => {
+      const angle = index / Math.max(paths.length, 1) * Math.PI * 2 - Math.PI / 2; const x = 50 + Math.cos(angle) * 39; const y = 50 + Math.sin(angle) * 38;
+      lines.createSvg("line", { attr: { x1: "50", y1: "50", x2: String(x), y2: String(y) } });
+      const node = preview.createEl("button", { text: path.split("/").pop()?.replace(/\.md$/i, "") ?? path, cls: "cw-graph-node" });
+      node.style.setProperty("--cw-node-x", `${x}%`); node.style.setProperty("--cw-node-y", `${y}%`);
+      host.registerDomEvent(node, "click", () => { const file = plugin.index.find(path); if (file) void plugin.app.workspace.getLeaf(false).openFile(file); });
+    });
+    if (!paths.length) preview.createDiv({ text: t("当前笔记暂无已解析关系"), cls: "cw-graph-empty" });
   }
 };
 

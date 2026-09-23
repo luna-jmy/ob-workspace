@@ -1,7 +1,7 @@
 import { Component, Setting, setIcon } from "obsidian";
 import type CustomWorkspacePlugin from "../main";
-import type { Block } from "../types";
-import { addParamSetting, componentName } from "../components/registry";
+import type { Block, BlockSpan } from "../types";
+import { addParamSetting, componentName, selectedStats, STAT_LABELS, type StatKey } from "../components/registry";
 import { cycleSpan, moveBlock } from "../workspace/layout";
 import { t } from "../i18n";
 
@@ -13,6 +13,7 @@ export class WorkspaceRenderer extends Component {
     this.scope = new Component(); this.addChild(this.scope);
     this.container.empty();
     this.container.toggleClass("is-editing", this.editing());
+    if (this.editing()) this.container.createDiv({ text: t("正在编辑工作台"), cls: "cw-edit-banner" });
     for (const [index, block] of this.plugin.data.workspace.blocks.entries()) this.renderBlock(block, index, this.scope);
     if (this.editing()) this.renderAdd(this.scope);
   }
@@ -46,8 +47,12 @@ export class WorkspaceRenderer extends Component {
       const element = controls.createEl("button", { attr: { "aria-label": label, title: label } }); setIcon(element, icon); element.addEventListener("click", action); return element;
     };
     button("arrow-up", t("上移"), () => void this.move(index, -1)); button("arrow-down", t("下移"), () => void this.move(index, 1));
-    const span = button("columns-3", block.span === 12 ? t("整行") : block.span === 6 ? t("半行") : t("三分之一"), () => void this.changeSpan(block, 1));
-    span.addEventListener("contextmenu", (event) => { event.preventDefault(); void this.changeSpan(block, -1); });
+    const widths = controls.createDiv({ cls: "cw-width-options", attr: { "aria-label": t("组件宽度") } });
+    const widthOptions: Array<[BlockSpan, string]> = [[3, t("四分之一")], [4, t("三分之一")], [6, t("半行")], [12, t("整行")]];
+    for (const [span, label] of widthOptions) {
+      const option = widths.createEl("button", { text: label, cls: block.span === span ? "is-active" : "" });
+      scope.registerDomEvent(option, "click", () => void this.setSpan(block, span));
+    }
     button("settings-2", t("配置"), () => this.toggleConfig(card, block, params, scope)); button("trash-2", t("删除"), () => void this.remove(index));
     scope.registerDomEvent(card, "keydown", (event) => {
       if (!event.altKey) return;
@@ -62,9 +67,20 @@ export class WorkspaceRenderer extends Component {
     const existing = card.querySelector(".cw-block__config"); if (existing) { existing.remove(); return; }
     const config = card.createDiv({ cls: "cw-block__config" });
     new Setting(config).setName(t("标题")).addText((text) => text.setValue(block.title ?? "").onChange(async (value) => { block.title = value || undefined; await this.plugin.persist(); }));
+    if (block.componentId === "builtin/vault-stats") { this.renderStatsEditor(config, block); return; }
     if (block.componentId === "builtin/command-buttons") { this.renderCommandEditor(config, block); return; }
     if (block.componentId === "builtin/dataview") { this.renderDataviewEditor(config, block, scope); return; }
     for (const param of params) addParamSetting(config, param, block, async () => this.persist());
+  }
+  private renderStatsEditor(container: HTMLElement, block: Block): void {
+    const selected = new Set<StatKey>(selectedStats(block.params.items));
+    const group = container.createDiv({ cls: "cw-stats-editor" }); group.createEl("h4", { text: t("统计项") });
+    for (const [key, label] of Object.entries(STAT_LABELS) as Array<[StatKey, string]>) {
+      new Setting(group).setName(t(label)).addToggle((toggle) => toggle.setValue(selected.has(key)).onChange(async (enabled) => {
+        if (enabled) selected.add(key); else selected.delete(key);
+        block.params.items = [...selected]; await this.plugin.persist();
+      }));
+    }
   }
   private renderCommandEditor(container: HTMLElement, block: Block): void {
     const values = Array.isArray(block.params.buttons) ? block.params.buttons.filter((value): value is { [key: string]: import("../types").ParamValue } => typeof value === "object" && value !== null && !Array.isArray(value)) : [];
@@ -108,6 +124,7 @@ export class WorkspaceRenderer extends Component {
   }
   private async move(index: number, offset: -1 | 1): Promise<void> { this.plugin.data.workspace.blocks = moveBlock(this.plugin.data.workspace.blocks, index, offset); await this.persist(); }
   private async changeSpan(block: Block, direction: -1 | 1): Promise<void> { block.span = cycleSpan(block.span, direction); await this.persist(); }
+  private async setSpan(block: Block, span: BlockSpan): Promise<void> { block.span = span; await this.persist(); }
   private async remove(index: number): Promise<void> { this.plugin.data.workspace.blocks.splice(index, 1); await this.persist(); }
   private async persist(): Promise<void> { await this.plugin.persist(); await this.render(); }
 }

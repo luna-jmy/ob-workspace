@@ -22,8 +22,9 @@ export class VaultIndex {
       outgoing: Object.values(resolved[file.path] ?? {}).reduce((sum, count) => sum + count, 0), incoming: incoming.get(file.path) ?? 0
     })));
     const files = this.app.vault.getFiles().filter((file) => this.included(file.path));
-    const folders = new Set(files.map((file) => file.parent?.path).filter((path): path is string => Boolean(path))).size;
-    return aggregateMetrics(notes, files.length - markdown.length, folders, Date.now(), this.recentDays(), this.threshold());
+    const attachmentPaths = files.filter((file) => file.extension !== "md").map((file) => file.path);
+    const folderPaths = [...new Set(files.map((file) => file.parent?.path).filter((path): path is string => Boolean(path)))];
+    return aggregateMetrics(notes, attachmentPaths, folderPaths, Date.now(), this.recentDays(), this.threshold());
   }
   recentNotes(limit: number, folder = ""): TFile[] {
     return this.app.vault.getMarkdownFiles().filter((file) => this.included(file.path) && (!folder || file.path.startsWith(`${folder}/`)))
