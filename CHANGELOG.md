@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.4
+
+- Fix the internal-link chart crash caused by passing multiple SVG classes as one DOM token.
+- Prevent the 365-day heatmap from overflowing narrow component cards.
+- Add tag and frontmatter key/value filters to Quick Jump.
+- Add live path search to every note drill-down modal.
+- Let the heatmap display either current readable words or new-note counts grouped by note creation date.
+
 ## 0.1.3
 
 - Remove the graph component and migrate existing graph cards out of saved workspaces.

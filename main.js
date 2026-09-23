@@ -59,7 +59,10 @@ var en = {
   "\u77ED\u7B14\u8BB0": "Short notes",
   "\u8FC7\u53BB 12 \u4E2A\u6708": "Past 12 months",
   "\u7BC7\u7B14\u8BB0": "notes",
-  "\u6309\u7B14\u8BB0\u6700\u540E\u4FEE\u6539\u65E5\u671F\u7EDF\u8BA1": "Based on each note's latest modification date",
+  "\u6309\u7B14\u8BB0\u521B\u5EFA\u65E5\u671F\u7EDF\u8BA1\u65B0\u589E\u7B14\u8BB0": "New notes grouped by note creation date",
+  "\u6309\u7B14\u8BB0\u521B\u5EFA\u65E5\u671F\u5F52\u7EC4\u5F53\u524D\u5B57\u6570": "Current word counts grouped by note creation date",
+  "\u5B57\u6570": "Word count",
+  "\u65B0\u589E\u7B14\u8BB0\u6570": "New notes",
   "\u5C11": "Less",
   "\u591A": "More",
   "\u5929": "days",
@@ -93,6 +96,13 @@ var en = {
   "\u4E09\u5206\u4E4B\u4E00": "One third",
   "\u56DB\u5206\u4E4B\u4E00": "One quarter",
   "\u7EC4\u4EF6\u5BBD\u5EA6": "Component width",
+  "\u663E\u793A\u6761\u6570": "Item limit",
+  "\u76EE\u5F55": "Folder",
+  "\u6807\u7B7E": "Tag",
+  "Frontmatter \u5C5E\u6027\u540D": "Frontmatter property",
+  "Frontmatter \u5C5E\u6027\u503C": "Frontmatter value",
+  "\u7EDF\u8BA1\u65B9\u5F0F": "Metric",
+  "\u7EDF\u8BA1\u8303\u56F4": "Range",
   "\u7EDF\u8BA1\u9879": "Statistics",
   "\u9700\u8981 Dataview \u63D2\u4EF6": "Requires the Dataview plugin",
   "\u9700\u8981 Templater \u63D2\u4EF6": "Requires the Templater plugin",
@@ -127,6 +137,9 @@ var en = {
   "\u6253\u5F00": "Open",
   "\u7EC4\u4EF6\u4E0D\u53EF\u7528": "Component unavailable",
   "\u4EC5\u663E\u793A\u524D 500 \u9879": "Showing the first 500 items only",
+  "\u641C\u7D22\u7B14\u8BB0\u2026": "Search notes\u2026",
+  "\u6761\u7ED3\u679C": "results",
+  "\u6CA1\u6709\u5339\u914D\u7B14\u8BB0": "No matching notes",
   "\u5173\u95ED": "Close",
   "\u672A\u77E5\u7EC4\u4EF6": "Unknown component",
   "\u8BF7\u8F93\u5165\u503C": "Enter a value"
@@ -275,6 +288,40 @@ ${body}
 
 // src/ui/detail-modal.ts
 var import_obsidian3 = require("obsidian");
+
+// src/metrics/note-filter.ts
+function readFrontmatterValue(frontmatter, key) {
+  let value = frontmatter;
+  for (const part of key.split(".").filter(Boolean)) {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) return void 0;
+    value = value[part];
+  }
+  return value;
+}
+function matchesValue(value, expected) {
+  if (Array.isArray(value)) return value.some((item) => matchesValue(item, expected));
+  if (value === null || value === void 0) return false;
+  if (typeof value === "string") return value.toLocaleLowerCase() === expected.toLocaleLowerCase();
+  if (typeof value === "number" || typeof value === "boolean") return value.toString().toLocaleLowerCase() === expected.toLocaleLowerCase();
+  return false;
+}
+function matchesNoteFilter(note, filter) {
+  var _a, _b, _c, _d, _e;
+  const folder = (_a = filter.folder) == null ? void 0 : _a.replace(/^\/+|\/+$/g, "");
+  if (folder && !note.path.startsWith(`${folder}/`)) return false;
+  const tag = filter.tag ? `#${filter.tag.replace(/^#/, "")}`.toLocaleLowerCase() : "";
+  if (tag && !note.tags.some((item) => item.toLocaleLowerCase() === tag)) return false;
+  const key = (_c = (_b = filter.frontmatterKey) == null ? void 0 : _b.trim()) != null ? _c : "";
+  const expected = (_e = (_d = filter.frontmatterValue) == null ? void 0 : _d.trim()) != null ? _e : "";
+  if (key && !matchesValue(readFrontmatterValue(note.frontmatter, key), expected)) return false;
+  return true;
+}
+function filterNotePaths(paths, query) {
+  const needle = query.trim().toLocaleLowerCase();
+  return needle ? paths.filter((path) => path.toLocaleLowerCase().includes(needle)) : paths;
+}
+
+// src/ui/detail-modal.ts
 var DetailModal = class extends import_obsidian3.Modal {
   constructor(app, title, paths, plugin) {
     super(app);
@@ -285,18 +332,38 @@ var DetailModal = class extends import_obsidian3.Modal {
   }
   onOpen() {
     this.setTitle(`${this.title} (${this.paths.length.toLocaleString()})`);
+    const search = this.contentEl.createEl("input", { cls: "cw-modal-search", type: "search", placeholder: t("\u641C\u7D22\u7B14\u8BB0\u2026"), attr: { "aria-label": t("\u641C\u7D22\u7B14\u8BB0\u2026") } });
+    const status = this.contentEl.createDiv({ cls: "cw-modal-note" });
     const list = this.contentEl.createDiv({ cls: "cw-modal-list" });
-    for (const path of this.paths.slice(0, 500)) {
-      const file = this.plugin.index.find(path);
-      if (file) {
-        const item = list.createEl("button", { text: path, cls: "cw-modal-list__item" });
-        this.listen(item, () => {
-          this.close();
-          void this.plugin.app.workspace.getLeaf(false).openFile(file);
-        });
-      } else list.createDiv({ text: path, cls: "cw-modal-list__item is-static" });
-    }
-    if (this.paths.length > 500) this.contentEl.createDiv({ text: t("\u4EC5\u663E\u793A\u524D 500 \u9879"), cls: "cw-modal-note" });
+    let rowCleanups = [];
+    const draw = () => {
+      for (const cleanup of rowCleanups) cleanup();
+      rowCleanups = [];
+      list.empty();
+      const matches = filterNotePaths(this.paths, search.value);
+      status.setText(matches.length > 500 ? `${matches.length.toLocaleString()} \xB7 ${t("\u4EC5\u663E\u793A\u524D 500 \u9879")}` : `${matches.length.toLocaleString()} ${t("\u6761\u7ED3\u679C")}`);
+      if (!matches.length) {
+        list.createDiv({ text: t("\u6CA1\u6709\u5339\u914D\u7B14\u8BB0"), cls: "cw-empty" });
+        return;
+      }
+      for (const path of matches.slice(0, 500)) {
+        const file = this.plugin.index.find(path);
+        if (file) {
+          const item = list.createEl("button", { text: path, cls: "cw-modal-list__item" });
+          const open = () => {
+            this.close();
+            void this.plugin.app.workspace.getLeaf(false).openFile(file);
+          };
+          item.addEventListener("click", open);
+          rowCleanups.push(() => item.removeEventListener("click", open));
+        } else list.createDiv({ text: path, cls: "cw-modal-list__item is-static" });
+      }
+    };
+    search.addEventListener("input", draw);
+    this.cleanups.push(() => search.removeEventListener("input", draw), () => {
+      for (const cleanup of rowCleanups) cleanup();
+    });
+    draw();
     const footer = this.contentEl.createDiv({ cls: "cw-modal-footer" });
     const close = footer.createEl("button", { text: t("\u5173\u95ED"), cls: "mod-cta" });
     this.listen(close, () => this.close());
@@ -320,20 +387,23 @@ function localDateKey(timestamp) {
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
-function aggregateActivity(notes, now, days = 365) {
+function aggregateHeatmap(notes, now, days = 365) {
   var _a;
   const start = new Date(now);
   start.setHours(0, 0, 0, 0);
   start.setDate(start.getDate() - Math.max(0, days - 1));
   const end = new Date(now);
   end.setHours(23, 59, 59, 999);
-  const counts = /* @__PURE__ */ new Map();
+  const values = /* @__PURE__ */ new Map();
   for (const note of notes) {
-    if (note.mtime < start.getTime() || note.mtime > end.getTime()) continue;
-    const date = localDateKey(note.mtime);
-    counts.set(date, ((_a = counts.get(date)) != null ? _a : 0) + 1);
+    if (note.ctime < start.getTime() || note.ctime > end.getTime()) continue;
+    const date = localDateKey(note.ctime);
+    const day = (_a = values.get(date)) != null ? _a : { date, notes: 0, words: 0 };
+    day.notes += 1;
+    day.words += note.words;
+    values.set(date, day);
   }
-  return [...counts.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, count]) => ({ date, count }));
+  return [...values.values()].sort((a, b) => a.date.localeCompare(b.date));
 }
 function aggregateTopFolders(notes) {
   var _a;
@@ -373,6 +443,11 @@ function linePathRange(values, maximum, from, to, width = 100, height = 48) {
 function areaPath(values, maximum, width = 100, height = 48) {
   const line = linePath(values, maximum, width, height);
   return line ? `${line} L ${width} ${height} L 0 ${height} Z` : "";
+}
+
+// src/ui/classes.ts
+function svgClasses(...tokens) {
+  return tokens;
 }
 
 // src/components/registry.ts
@@ -440,10 +515,18 @@ var quickJump = {
   description: "",
   params: [
     { key: "limit", type: "number", defaultValue: 8 },
-    { key: "folder", type: "folder", defaultValue: "" }
+    { key: "folder", type: "folder", defaultValue: "" },
+    { key: "tag", type: "tag", defaultValue: "" },
+    { key: "frontmatterKey", type: "text", defaultValue: "" },
+    { key: "frontmatterValue", type: "text", defaultValue: "" }
   ],
   async render(container, block, _host, plugin) {
-    const files = plugin.index.recentNotes(paramNumber(block.params.limit, 8), paramString(block.params.folder));
+    const files = plugin.index.recentNotes(paramNumber(block.params.limit, 8), {
+      folder: paramString(block.params.folder),
+      tag: paramString(block.params.tag),
+      frontmatterKey: paramString(block.params.frontmatterKey),
+      frontmatterValue: paramString(block.params.frontmatterValue)
+    });
     if (!files.length) {
       container.createDiv({ text: t("\u6682\u65E0\u5185\u5BB9"), cls: "cw-empty" });
       return;
@@ -585,30 +668,33 @@ var activityHeatmap = {
   name: "\u5199\u4F5C\u70ED\u529B\u56FE",
   icon: "calendar-days",
   description: "",
-  params: [],
-  async render(container, _block, _host, plugin) {
+  params: [{ key: "metric", type: "select:\u5B57\u6570,\u65B0\u589E\u7B14\u8BB0\u6570", defaultValue: "\u5B57\u6570" }],
+  async render(container, block, _host, plugin) {
     var _a;
     const data = await plugin.index.metrics();
-    const counts = new Map(data.activity.map((day) => [day.date, day.count]));
-    const maximum = Math.max(0, ...data.activity.map((day) => day.count));
-    const total = data.activity.reduce((sum, day) => sum + day.count, 0);
+    const useNotes = paramString(block.params.metric, "\u5B57\u6570") === "\u65B0\u589E\u7B14\u8BB0\u6570";
+    const values = new Map(data.heatmap.map((day) => [day.date, useNotes ? day.notes : day.words]));
+    const maximum = Math.max(0, ...values.values());
+    const total = [...values.values()].reduce((sum, value) => sum + value, 0);
     const summary = container.createDiv({ cls: "cw-analytics-summary" });
     summary.createSpan({ text: t("\u8FC7\u53BB 12 \u4E2A\u6708") });
-    summary.createSpan({ text: `${total.toLocaleString()} ${t("\u7BC7\u7B14\u8BB0")}` });
-    const grid = container.createDiv({ cls: "cw-heatmap", attr: { role: "img", "aria-label": t("\u6309\u7B14\u8BB0\u6700\u540E\u4FEE\u6539\u65E5\u671F\u7EDF\u8BA1") } });
+    summary.createSpan({ text: `${total.toLocaleString()} ${useNotes ? t("\u7BC7\u7B14\u8BB0") : t("\u5B57")}` });
+    const explanation = useNotes ? t("\u6309\u7B14\u8BB0\u521B\u5EFA\u65E5\u671F\u7EDF\u8BA1\u65B0\u589E\u7B14\u8BB0") : t("\u6309\u7B14\u8BB0\u521B\u5EFA\u65E5\u671F\u5F52\u7EC4\u5F53\u524D\u5B57\u6570");
+    const unit = useNotes ? t("\u7BC7") : t("\u5B57");
+    const grid = container.createDiv({ cls: "cw-heatmap", attr: { role: "img", "aria-label": explanation } });
     const end = moment().startOf("day");
     const start = end.clone().subtract(364, "days");
     for (let index = 0; index < start.day(); index += 1) grid.createSpan({ cls: "cw-heatmap__blank", attr: { "aria-hidden": "true" } });
     for (let index = 0; index < 365; index += 1) {
       const date = start.clone().add(index, "days").format("YYYY-MM-DD");
-      const count = (_a = counts.get(date)) != null ? _a : 0;
-      grid.createSpan({ cls: `cw-heatmap__day cw-heatmap__day--${activityLevel(count, maximum)}`, attr: { title: `${date}: ${count}`, "aria-label": `${date}: ${count}` } });
+      const count = (_a = values.get(date)) != null ? _a : 0;
+      grid.createSpan({ cls: `cw-heatmap__day cw-heatmap__day--${activityLevel(count, maximum)}`, attr: { title: `${date}: ${count.toLocaleString()} ${unit}`, "aria-label": `${date}: ${count.toLocaleString()} ${unit}` } });
     }
     const footer = container.createDiv({ cls: "cw-heatmap-legend" });
     footer.createSpan({ text: t("\u5C11") });
     for (let level = 1; level <= 5; level += 1) footer.createSpan({ cls: `cw-heatmap__day cw-heatmap__day--${level}`, attr: { "aria-hidden": "true" } });
     footer.createSpan({ text: t("\u591A") });
-    container.createDiv({ text: t("\u6309\u7B14\u8BB0\u6700\u540E\u4FEE\u6539\u65E5\u671F\u7EDF\u8BA1"), cls: "cw-analytics-note" });
+    container.createDiv({ text: explanation, cls: "cw-analytics-note" });
   }
 };
 var linkTrend = {
@@ -647,7 +733,7 @@ var linkTrend = {
     history.forEach((point, index) => {
       if (point.estimated) lastEstimated = index;
     });
-    if (lastEstimated >= 0) svg.createSvg("path", { cls: "cw-link-chart__line is-estimated", attr: { d: linePathRange(values, maximum, 0, lastEstimated) } });
+    if (lastEstimated >= 0) svg.createSvg("path", { cls: svgClasses("cw-link-chart__line", "is-estimated"), attr: { d: linePathRange(values, maximum, 0, lastEstimated) } });
     const actualStart = Math.max(0, history.findIndex((point) => !point.estimated) - 1);
     if (history.some((point) => !point.estimated)) svg.createSvg("path", { cls: "cw-link-chart__line", attr: { d: linePathRange(values, maximum, actualStart, history.length - 1) } });
     svg.createSvg("circle", { cls: "cw-link-chart__point", attr: { cx: "100", cy: String(48 - last.links / maximum * 48), r: "1.2" } });
@@ -742,9 +828,19 @@ function scriptDefinition(filename, name, icon, description, params) {
   } };
 }
 function addParamSetting(parent, definition, block, onChange) {
-  var _a;
-  const setting = new import_obsidian4.Setting(parent).setName(definition.key);
-  const value = (_a = block.params[definition.key]) != null ? _a : definition.defaultValue;
+  var _a, _b;
+  const labels = {
+    limit: t("\u663E\u793A\u6761\u6570"),
+    folder: t("\u76EE\u5F55"),
+    tag: t("\u6807\u7B7E"),
+    frontmatterKey: t("Frontmatter \u5C5E\u6027\u540D"),
+    frontmatterValue: t("Frontmatter \u5C5E\u6027\u503C"),
+    metric: t("\u7EDF\u8BA1\u65B9\u5F0F"),
+    range: t("\u7EDF\u8BA1\u8303\u56F4")
+  };
+  const optionLabels = { "\u5B57\u6570": t("\u5B57\u6570"), "\u65B0\u589E\u7B14\u8BB0\u6570": t("\u65B0\u589E\u7B14\u8BB0\u6570") };
+  const setting = new import_obsidian4.Setting(parent).setName((_a = labels[definition.key]) != null ? _a : definition.key);
+  const value = (_b = block.params[definition.key]) != null ? _b : definition.defaultValue;
   if (definition.type === "boolean") setting.addToggle((toggle) => toggle.setValue(Boolean(value)).onChange(async (next) => {
     block.params[definition.key] = next;
     await onChange();
@@ -757,7 +853,8 @@ function addParamSetting(parent, definition, block, onChange) {
     }
   }));
   else if (definition.type.startsWith("select:")) setting.addDropdown((dropdown) => {
-    for (const option of definition.type.slice(7).split(",")) dropdown.addOption(option, option);
+    var _a2;
+    for (const option of definition.type.slice(7).split(",")) dropdown.addOption(option, (_a2 = optionLabels[option]) != null ? _a2 : option);
     dropdown.setValue(paramString(value)).onChange(async (next) => {
       block.params[definition.key] = next;
       await onChange();
@@ -1288,7 +1385,7 @@ function aggregateMetrics(notes, attachmentPaths, folderPaths, now, recentDays, 
     orphanPaths: notes.filter((note) => note.outgoing === 0 && note.incoming === 0).map((note) => note.path),
     emptyPaths: notes.filter((note) => note.words === 0).map((note) => note.path),
     shortPaths: notes.filter((note) => note.words <= shortThreshold).map((note) => note.path),
-    activity: aggregateActivity(notes, now),
+    heatmap: aggregateHeatmap(notes, now),
     topFolders: aggregateTopFolders(notes)
   };
 }
@@ -1337,8 +1434,13 @@ var VaultIndex = class {
     }).filter((path) => Boolean(path)))];
     return aggregateMetrics(notes, attachmentPaths, folderPaths, Date.now(), this.recentDays(), this.threshold());
   }
-  recentNotes(limit, folder = "") {
-    return this.app.vault.getMarkdownFiles().filter((file) => this.included(file.path) && (!folder || file.path.startsWith(`${folder}/`))).sort((a, b) => b.stat.mtime - a.stat.mtime).slice(0, limit);
+  recentNotes(limit, filter = {}) {
+    return this.app.vault.getMarkdownFiles().filter((file) => {
+      var _a;
+      if (!this.included(file.path)) return false;
+      const cache = this.app.metadataCache.getFileCache(file);
+      return matchesNoteFilter({ path: file.path, tags: cache ? (_a = (0, import_obsidian7.getAllTags)(cache)) != null ? _a : [] : [], frontmatter: cache == null ? void 0 : cache.frontmatter }, filter);
+    }).sort((a, b) => b.stat.mtime - a.stat.mtime).slice(0, limit);
   }
   find(path) {
     const file = this.app.vault.getAbstractFileByPath(path);
