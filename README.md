@@ -8,7 +8,7 @@ Enable the plugin, then use the ribbon icon or **Open workspace** command. Choos
 
 The plugin does not use the network, telemetry, accounts, or automatic updates. Native components do not require other plugins. Tasks are read-only: selecting one opens its source line.
 
-Quick Jump can combine folder, tag, and frontmatter key/value filters. The writing heatmap groups notes by creation date and can display either new-note counts or the current readable word total of notes created on each day; it does not claim to reconstruct historical writing volume.
+Quick Jump can combine folder, tag, and frontmatter key/value filters. For new-note counts, the writing heatmap prefers each note's `created` frontmatter value and falls back to filesystem creation time; word-count mode groups each note's current readable word total by filesystem modification date. It does not claim to reconstruct historical writing volume.
 
 ## Optional integrations
 

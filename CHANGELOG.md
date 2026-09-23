@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.5
+
+- Prefer valid frontmatter `created` values for new-note heatmap dates, falling back to filesystem creation time only when needed.
+- Group word-count heatmap values by filesystem modification date and switch quarter-width heatmaps to a square matrix.
+- Add Base file selection, validation, embedded preview, and open fallback behavior.
+- Add Dataview query context, empty and invalid configuration states, and safe repeated test runs.
+- Keep edit-mode layout changes on explicit controls only.
+
 ## 0.1.4
 
 - Fix the internal-link chart crash caused by passing multiple SVG classes as one DOM token.

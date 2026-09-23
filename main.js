@@ -59,8 +59,8 @@ var en = {
   "\u77ED\u7B14\u8BB0": "Short notes",
   "\u8FC7\u53BB 12 \u4E2A\u6708": "Past 12 months",
   "\u7BC7\u7B14\u8BB0": "notes",
-  "\u6309\u7B14\u8BB0\u521B\u5EFA\u65E5\u671F\u7EDF\u8BA1\u65B0\u589E\u7B14\u8BB0": "New notes grouped by note creation date",
-  "\u6309\u7B14\u8BB0\u521B\u5EFA\u65E5\u671F\u5F52\u7EC4\u5F53\u524D\u5B57\u6570": "Current word counts grouped by note creation date",
+  "\u65B0\u589E\u7B14\u8BB0\u4F18\u5148\u4F7F\u7528 created\uFF0C\u7F3A\u5931\u65F6\u4F7F\u7528\u6587\u4EF6\u521B\u5EFA\u65F6\u95F4": "New notes use the created property first, falling back to the file creation time",
+  "\u6309\u7CFB\u7EDF\u4FEE\u6539\u65E5\u671F\u5F52\u7EC4\u5F53\u524D\u5B57\u6570": "Current word counts grouped by system modification date",
   "\u5B57\u6570": "Word count",
   "\u65B0\u589E\u7B14\u8BB0\u6570": "New notes",
   "\u5C11": "Less",
@@ -87,6 +87,12 @@ var en = {
   "\u8981\u786E\u8BA4": "Require confirmation",
   "\u6DFB\u52A0\u6309\u94AE": "Add button",
   "\u4EE3\u7801": "Code",
+  "\u67E5\u8BE2\u4E0A\u4E0B\u6587\u7B14\u8BB0": "Query context note",
+  "\u7559\u7A7A\u65F6\u4F7F\u7528\u5F53\u524D\u6D3B\u52A8\u7B14\u8BB0": "Leave blank to use the active note",
+  "\u7B14\u8BB0\u8DEF\u5F84\uFF08\u53EF\u9009\uFF09": "Note path (optional)",
+  "\u8BF7\u8F93\u5165 DataviewJS \u67E5\u8BE2\u4EE3\u7801": "Enter DataviewJS query code",
+  "\u627E\u4E0D\u5230\u67E5\u8BE2\u4E0A\u4E0B\u6587\u7B14\u8BB0": "Query context note not found",
+  "\u8BF7\u5728\u7F16\u8F91\u6A21\u5F0F\u914D\u7F6E\u5E76\u8BD5\u8FD0\u884C\u67E5\u8BE2": "Configure and test the query in edit mode",
   "\u8BD5\u8FD0\u884C\u5E76\u4FDD\u5B58": "Test and save",
   "\u8BD5\u8FD0\u884C\u6210\u529F\uFF0C\u5DF2\u4FDD\u5B58\u3002": "Test succeeded and was saved.",
   "\u4E0A\u79FB": "Move up",
@@ -135,7 +141,11 @@ var en = {
   "\u6E05\u7A7A": "Clear",
   "\u5C1A\u65E0\u547D\u4EE4\u6309\u94AE\uFF0C\u8BF7\u5728\u7F16\u8F91\u6A21\u5F0F\u914D\u7F6E\u3002": "No command buttons yet. Configure them in edit mode.",
   "\u6253\u5F00": "Open",
-  "\u7EC4\u4EF6\u4E0D\u53EF\u7528": "Component unavailable",
+  "Base \u6587\u4EF6": "Base file",
+  "\u8BF7\u9009\u62E9 Base \u6587\u4EF6": "Select a Base file",
+  "\u8BF7\u5728\u7F16\u8F91\u6A21\u5F0F\u9009\u62E9 Base \u6587\u4EF6": "Select a Base file in edit mode",
+  "\u627E\u4E0D\u5230\u6240\u9009 Base \u6587\u4EF6": "The selected Base file was not found",
+  "\u4ED3\u5E93\u4E2D\u6CA1\u6709 .base \u6587\u4EF6": "No .base files were found in the vault",
   "\u4EC5\u663E\u793A\u524D 500 \u9879": "Showing the first 500 items only",
   "\u641C\u7D22\u7B14\u8BB0\u2026": "Search notes\u2026",
   "\u6761\u7ED3\u679C": "results",
@@ -387,21 +397,41 @@ function localDateKey(timestamp) {
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
+function resolveCreatedDate(value, fallbackTimestamp) {
+  const fallback = localDateKey(fallbackTimestamp);
+  if (typeof value !== "string" && typeof value !== "number") return fallback;
+  const match = String(value).trim().match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:\D|$)/);
+  if (!match) return fallback;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const parsed = new Date(year, month - 1, day);
+  if (parsed.getFullYear() !== year || parsed.getMonth() !== month - 1 || parsed.getDate() !== day) return fallback;
+  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
 function aggregateHeatmap(notes, now, days = 365) {
-  var _a;
+  var _a, _b;
   const start = new Date(now);
   start.setHours(0, 0, 0, 0);
   start.setDate(start.getDate() - Math.max(0, days - 1));
   const end = new Date(now);
   end.setHours(23, 59, 59, 999);
+  const startKey = localDateKey(start.getTime());
+  const endKey = localDateKey(end.getTime());
   const values = /* @__PURE__ */ new Map();
   for (const note of notes) {
-    if (note.ctime < start.getTime() || note.ctime > end.getTime()) continue;
-    const date = localDateKey(note.ctime);
-    const day = (_a = values.get(date)) != null ? _a : { date, notes: 0, words: 0 };
-    day.notes += 1;
-    day.words += note.words;
-    values.set(date, day);
+    const createdDate = resolveCreatedDate(note.frontmatterCreated, note.ctime);
+    if (createdDate >= startKey && createdDate <= endKey) {
+      const createdDay = (_a = values.get(createdDate)) != null ? _a : { date: createdDate, notes: 0, words: 0 };
+      createdDay.notes += 1;
+      values.set(createdDate, createdDay);
+    }
+    if (note.mtime >= start.getTime() && note.mtime <= end.getTime()) {
+      const modifiedDate = localDateKey(note.mtime);
+      const modifiedDay = (_b = values.get(modifiedDate)) != null ? _b : { date: modifiedDate, notes: 0, words: 0 };
+      modifiedDay.words += note.words;
+      values.set(modifiedDate, modifiedDay);
+    }
   }
   return [...values.values()].sort((a, b) => a.date.localeCompare(b.date));
 }
@@ -599,7 +629,10 @@ var dataview = {
   name: "Dataview \u67E5\u8BE2",
   icon: "table",
   description: "",
-  params: [{ key: "code", type: "text", defaultValue: "" }],
+  params: [
+    { key: "code", type: "text", defaultValue: "" },
+    { key: "source", type: "note", defaultValue: "" }
+  ],
   async render(container, block, host, plugin) {
     var _a, _b;
     const api = plugin.bridge.dataview();
@@ -607,7 +640,14 @@ var dataview = {
       unavailable(container, t("\u9700\u8981 Dataview \u63D2\u4EF6"));
       return;
     }
-    await api.executeJs(paramString(block.params.code), container, host, (_b = (_a = plugin.app.workspace.getActiveFile()) == null ? void 0 : _a.path) != null ? _b : "");
+    const code = paramString(block.params.code);
+    if (!code.trim()) {
+      unavailable(container, t("\u8BF7\u5728\u7F16\u8F91\u6A21\u5F0F\u914D\u7F6E\u5E76\u8BD5\u8FD0\u884C\u67E5\u8BE2"));
+      return;
+    }
+    const configuredSource = paramString(block.params.source);
+    const source = configuredSource && plugin.index.find(configuredSource) ? configuredSource : (_b = (_a = plugin.app.workspace.getActiveFile()) == null ? void 0 : _a.path) != null ? _b : "";
+    await api.executeJs(code, container, host, source);
   }
 };
 var baseView = {
@@ -617,17 +657,21 @@ var baseView = {
   description: "",
   params: [{ key: "file", type: "note", defaultValue: "" }],
   async render(container, block, host, plugin) {
+    var _a, _b;
     const path = paramString(block.params.file);
+    const file = plugin.index.find(path);
     if (!path) {
-      unavailable(container, t("\u7EC4\u4EF6\u4E0D\u53EF\u7528"));
+      unavailable(container, t("\u8BF7\u5728\u7F16\u8F91\u6A21\u5F0F\u9009\u62E9 Base \u6587\u4EF6"));
       return;
     }
-    await import_obsidian4.MarkdownRenderer.render(plugin.app, `![[${path}]]`, container, "", host);
+    if (!file || file.extension !== "base") {
+      unavailable(container, t("\u627E\u4E0D\u5230\u6240\u9009 Base \u6587\u4EF6"));
+      return;
+    }
+    const preview = container.createDiv({ cls: "cw-base-preview" });
+    await import_obsidian4.MarkdownRenderer.render(plugin.app, `![[${path}]]`, preview, (_b = (_a = plugin.app.workspace.getActiveFile()) == null ? void 0 : _a.path) != null ? _b : "", host);
     const open = container.createEl("button", { text: t("\u6253\u5F00"), cls: "cw-link-button" });
-    open.addEventListener("click", () => {
-      const file = plugin.index.find(path);
-      if (file) void plugin.app.workspace.getLeaf(false).openFile(file);
-    });
+    host.registerDomEvent(open, "click", () => void plugin.app.workspace.getLeaf(false).openFile(file));
   }
 };
 var wordsTrend = {
@@ -679,9 +723,9 @@ var activityHeatmap = {
     const summary = container.createDiv({ cls: "cw-analytics-summary" });
     summary.createSpan({ text: t("\u8FC7\u53BB 12 \u4E2A\u6708") });
     summary.createSpan({ text: `${total.toLocaleString()} ${useNotes ? t("\u7BC7\u7B14\u8BB0") : t("\u5B57")}` });
-    const explanation = useNotes ? t("\u6309\u7B14\u8BB0\u521B\u5EFA\u65E5\u671F\u7EDF\u8BA1\u65B0\u589E\u7B14\u8BB0") : t("\u6309\u7B14\u8BB0\u521B\u5EFA\u65E5\u671F\u5F52\u7EC4\u5F53\u524D\u5B57\u6570");
+    const explanation = useNotes ? t("\u65B0\u589E\u7B14\u8BB0\u4F18\u5148\u4F7F\u7528 created\uFF0C\u7F3A\u5931\u65F6\u4F7F\u7528\u6587\u4EF6\u521B\u5EFA\u65F6\u95F4") : t("\u6309\u7CFB\u7EDF\u4FEE\u6539\u65E5\u671F\u5F52\u7EC4\u5F53\u524D\u5B57\u6570");
     const unit = useNotes ? t("\u7BC7") : t("\u5B57");
-    const grid = container.createDiv({ cls: "cw-heatmap", attr: { role: "img", "aria-label": explanation } });
+    const grid = container.createDiv({ cls: `cw-heatmap${block.span === 3 ? " cw-heatmap--square" : ""}`, attr: { role: "img", "aria-label": explanation } });
     const end = moment().startOf("day");
     const start = end.clone().subtract(364, "days");
     for (let index = 0; index < start.day(); index += 1) grid.createSpan({ cls: "cw-heatmap__blank", attr: { "aria-hidden": "true" } });
@@ -870,24 +914,12 @@ function unavailable(container, message) {
 }
 
 // src/workspace/layout.ts
-var SPANS = [3, 4, 6, 12];
 function moveBlock(blocks, index, offset) {
   const target = index + offset;
   if (index < 0 || index >= blocks.length || target < 0 || target >= blocks.length) return [...blocks];
   const next = [...blocks];
   [next[index], next[target]] = [next[target], next[index]];
   return next;
-}
-function moveBlockTo(blocks, from, to) {
-  if (from < 0 || from >= blocks.length || to < 0 || to >= blocks.length || from === to) return [...blocks];
-  const next = [...blocks];
-  const [block] = next.splice(from, 1);
-  next.splice(to, 0, block);
-  return next;
-}
-function cycleSpan(span, direction) {
-  const index = SPANS.indexOf(span);
-  return SPANS[Math.max(0, Math.min(SPANS.length - 1, index + direction))];
 }
 
 // src/render/workspace-renderer.ts
@@ -983,55 +1015,11 @@ ${detail}` : detail, cls: "cw-error" });
     }
     button("settings-2", t("\u914D\u7F6E"), () => this.toggleConfig(card, block, params, scope, refreshPreview, titleText, defaultTitle));
     button("trash-2", t("\u5220\u9664"), () => void this.remove(index));
-    header.draggable = true;
-    header.addClass("cw-drag-handle");
-    scope.registerDomEvent(header, "dragstart", (event) => {
-      var _a;
-      this.draggedIndex = index;
-      card.addClass("is-dragging");
-      (_a = event.dataTransfer) == null ? void 0 : _a.setData("text/plain", block.id);
-      if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
-    });
-    scope.registerDomEvent(header, "dragend", () => {
-      this.draggedIndex = void 0;
-      card.removeClass("is-dragging");
-    });
-    scope.registerDomEvent(card, "dragover", (event) => {
-      if (this.draggedIndex === void 0) return;
-      event.preventDefault();
-      card.addClass("is-drag-over");
-    });
-    scope.registerDomEvent(card, "dragleave", () => card.removeClass("is-drag-over"));
-    scope.registerDomEvent(card, "drop", (event) => {
-      event.preventDefault();
-      card.removeClass("is-drag-over");
-      if (this.draggedIndex !== void 0) void this.moveTo(this.draggedIndex, index);
-    });
-    scope.registerDomEvent(card, "keydown", (event) => {
-      if (!event.altKey) return;
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        void this.move(index, -1);
-      }
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        void this.move(index, 1);
-      }
-      if (event.key === "ArrowLeft") {
-        event.preventDefault();
-        void this.changeSpan(block, -1);
-      }
-      if (event.key === "ArrowRight") {
-        event.preventDefault();
-        void this.changeSpan(block, 1);
-      }
-    });
-    card.tabIndex = 0;
   }
   toggleConfig(card, block, params, scope, refreshPreview, titleText, defaultTitle) {
     const existing = card.querySelector(".cw-block__config");
     if (existing) {
-      existing.remove();
+      void this.render();
       return;
     }
     const config = card.createDiv({ cls: "cw-block__config" });
@@ -1049,6 +1037,10 @@ ${detail}` : detail, cls: "cw-error" });
     }
     if (block.componentId === "builtin/command-buttons") {
       this.renderCommandEditor(config, block, refreshPreview);
+      return;
+    }
+    if (block.componentId === "builtin/base") {
+      this.renderBaseEditor(config, block, refreshPreview);
       return;
     }
     if (block.componentId === "builtin/dataview") {
@@ -1119,27 +1111,62 @@ ${detail}` : detail, cls: "cw-error" });
     };
     draw();
   }
+  renderBaseEditor(container, block, refreshPreview) {
+    const files = this.plugin.app.vault.getFiles().filter((file) => file.extension === "base").sort((a, b) => a.path.localeCompare(b.path));
+    if (!files.length) {
+      container.createDiv({ text: t("\u4ED3\u5E93\u4E2D\u6CA1\u6709 .base \u6587\u4EF6"), cls: "cw-unavailable" });
+      return;
+    }
+    new import_obsidian5.Setting(container).setName(t("Base \u6587\u4EF6")).addDropdown((dropdown) => {
+      dropdown.addOption("", t("\u8BF7\u9009\u62E9 Base \u6587\u4EF6"));
+      for (const file of files) dropdown.addOption(file.path, file.path);
+      dropdown.setValue(typeof block.params.file === "string" ? block.params.file : "").onChange(async (value) => {
+        block.params.file = value;
+        await this.plugin.persist();
+        await refreshPreview();
+      });
+    });
+  }
   renderDataviewEditor(container, block, scope, refreshPreview) {
     let draft = typeof block.params.code === "string" ? block.params.code : "";
+    let draftSource = typeof block.params.source === "string" ? block.params.source : "";
+    new import_obsidian5.Setting(container).setName(t("\u67E5\u8BE2\u4E0A\u4E0B\u6587\u7B14\u8BB0")).setDesc(t("\u7559\u7A7A\u65F6\u4F7F\u7528\u5F53\u524D\u6D3B\u52A8\u7B14\u8BB0")).addText((text) => text.setValue(draftSource).setPlaceholder(t("\u7B14\u8BB0\u8DEF\u5F84\uFF08\u53EF\u9009\uFF09")).onChange((value) => {
+      draftSource = value.trim();
+    }));
     const area = container.createEl("textarea", { cls: "cw-code-input", attr: { rows: "8", "aria-label": t("\u4EE3\u7801") } });
     area.value = draft;
     scope.registerDomEvent(area, "input", () => {
       draft = area.value;
     });
     const preview = container.createDiv({ cls: "cw-dataview-preview" });
+    let testChild;
     new import_obsidian5.Setting(container).addButton((button) => button.setButtonText(t("\u8BD5\u8FD0\u884C\u5E76\u4FDD\u5B58")).setCta().onClick(async () => {
-      var _a, _b;
+      var _a;
       preview.empty();
       const api = this.plugin.bridge.dataview();
       if (!api) {
         preview.setText(t("\u9700\u8981 Dataview \u63D2\u4EF6"));
         return;
       }
-      const child = new import_obsidian5.Component();
-      scope.addChild(child);
+      if (!draft.trim()) {
+        preview.setText(t("\u8BF7\u8F93\u5165 DataviewJS \u67E5\u8BE2\u4EE3\u7801"));
+        return;
+      }
+      if (draftSource && !this.plugin.index.find(draftSource)) {
+        preview.setText(t("\u627E\u4E0D\u5230\u67E5\u8BE2\u4E0A\u4E0B\u6587\u7B14\u8BB0"));
+        return;
+      }
+      if (testChild) {
+        scope.removeChild(testChild);
+        testChild.unload();
+      }
+      testChild = new import_obsidian5.Component();
+      scope.addChild(testChild);
+      const source = draftSource || ((_a = this.plugin.app.workspace.getActiveFile()) == null ? void 0 : _a.path) || "";
       try {
-        await api.executeJs(draft, preview, child, (_b = (_a = this.plugin.app.workspace.getActiveFile()) == null ? void 0 : _a.path) != null ? _b : "");
+        await api.executeJs(draft, preview, testChild, source);
         block.params.code = draft;
+        block.params.source = draftSource;
         await this.plugin.persist();
         await refreshPreview();
         preview.createDiv({ text: t("\u8BD5\u8FD0\u884C\u6210\u529F\uFF0C\u5DF2\u4FDD\u5B58\u3002"), cls: "cw-success" });
@@ -1160,15 +1187,6 @@ ${detail}` : detail, cls: "cw-error" });
   }
   async move(index, offset) {
     this.plugin.data.workspace.blocks = moveBlock(this.plugin.data.workspace.blocks, index, offset);
-    await this.persist();
-  }
-  async moveTo(from, to) {
-    this.plugin.data.workspace.blocks = moveBlockTo(this.plugin.data.workspace.blocks, from, to);
-    this.draggedIndex = void 0;
-    await this.persist();
-  }
-  async changeSpan(block, direction) {
-    block.span = cycleSpan(block.span, direction);
     await this.persist();
   }
   async setSpan(block, span) {
@@ -1417,10 +1435,13 @@ var VaultIndex = class {
     for (const targets of Object.values(resolved)) for (const [path, count] of Object.entries(targets)) incoming.set(path, ((_a = incoming.get(path)) != null ? _a : 0) + count);
     const notes = await Promise.all(markdown.map(async (file) => {
       var _a2, _b;
+      const cache = this.app.metadataCache.getFileCache(file);
+      const frontmatter = cache == null ? void 0 : cache.frontmatter;
       return {
         path: file.path,
         ctime: file.stat.ctime,
         mtime: file.stat.mtime,
+        frontmatterCreated: frontmatter == null ? void 0 : frontmatter.created,
         words: countReadableWords(await this.app.vault.cachedRead(file)),
         outgoing: Object.values((_a2 = resolved[file.path]) != null ? _a2 : {}).reduce((sum, count) => sum + count, 0),
         incoming: (_b = incoming.get(file.path)) != null ? _b : 0
