@@ -22,7 +22,7 @@ __export(main_exports, {
   default: () => CustomWorkspacePlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian7 = require("obsidian");
+var import_obsidian8 = require("obsidian");
 
 // src/settings.ts
 var import_obsidian2 = require("obsidian");
@@ -33,6 +33,8 @@ var en = {
   "\u6253\u5F00\u5DE5\u4F5C\u53F0": "Open workspace",
   "\u5207\u6362\u7F16\u8F91\u6A21\u5F0F": "Toggle edit mode",
   "\u7F16\u8F91\u6A21\u5F0F": "Edit mode",
+  "\u5B8C\u6210\u7F16\u8F91": "Finish editing",
+  "\u6B63\u5728\u7F16\u8F91\u5DE5\u4F5C\u53F0": "Editing workspace",
   "\u6DFB\u52A0\u7EC4\u4EF6": "Add component",
   "\u4ED3\u5E93\u7EDF\u8BA1": "Vault stats",
   "\u4ECA\u65E5\u4EFB\u52A1": "Today's tasks",
@@ -75,6 +77,9 @@ var en = {
   "\u6574\u884C": "Full width",
   "\u534A\u884C": "Half width",
   "\u4E09\u5206\u4E4B\u4E00": "One third",
+  "\u56DB\u5206\u4E4B\u4E00": "One quarter",
+  "\u7EC4\u4EF6\u5BBD\u5EA6": "Component width",
+  "\u7EDF\u8BA1\u9879": "Statistics",
   "\u9700\u8981 Dataview \u63D2\u4EF6": "Requires the Dataview plugin",
   "\u9700\u8981 Templater \u63D2\u4EF6": "Requires the Templater plugin",
   "\u547D\u4EE4\u63A5\u53E3\u4E0D\u53EF\u7528": "Command interface unavailable",
@@ -107,6 +112,10 @@ var en = {
   "\u5C1A\u65E0\u547D\u4EE4\u6309\u94AE\uFF0C\u8BF7\u5728\u7F16\u8F91\u6A21\u5F0F\u914D\u7F6E\u3002": "No command buttons yet. Configure them in edit mode.",
   "\u6253\u5F00": "Open",
   "\u7EC4\u4EF6\u4E0D\u53EF\u7528": "Component unavailable",
+  "\u4ED3\u5E93\u91CC\u8FD8\u6CA1\u6709\u53EF\u9884\u89C8\u7684\u94FE\u63A5\u5173\u7CFB": "There are no link relationships to preview yet",
+  "\u5F53\u524D\u7B14\u8BB0\u6682\u65E0\u5DF2\u89E3\u6790\u5173\u7CFB": "This note has no resolved relationships",
+  "\u4EC5\u663E\u793A\u524D 500 \u9879": "Showing the first 500 items only",
+  "\u5173\u95ED": "Close",
   "\u672A\u77E5\u7EC4\u4EF6": "Unknown component",
   "\u8BF7\u8F93\u5165\u503C": "Enter a value"
 };
@@ -206,13 +215,13 @@ function numberSetting(container, name, value, change) {
 }
 
 // src/views/workspace-view.ts
-var import_obsidian5 = require("obsidian");
+var import_obsidian6 = require("obsidian");
 
 // src/render/workspace-renderer.ts
-var import_obsidian4 = require("obsidian");
+var import_obsidian5 = require("obsidian");
 
 // src/components/registry.ts
-var import_obsidian3 = require("obsidian");
+var import_obsidian4 = require("obsidian");
 
 // src/params/parser.ts
 function parseScriptMetadata(source, filename) {
@@ -252,6 +261,45 @@ ${body}
   await execute(context);
 }
 
+// src/ui/detail-modal.ts
+var import_obsidian3 = require("obsidian");
+var DetailModal = class extends import_obsidian3.Modal {
+  constructor(app, title, paths, plugin) {
+    super(app);
+    this.title = title;
+    this.paths = paths;
+    this.plugin = plugin;
+    this.cleanups = [];
+  }
+  onOpen() {
+    this.setTitle(`${this.title} (${this.paths.length.toLocaleString()})`);
+    const list = this.contentEl.createDiv({ cls: "cw-modal-list" });
+    for (const path of this.paths.slice(0, 500)) {
+      const file = this.plugin.index.find(path);
+      if (file) {
+        const item = list.createEl("button", { text: path, cls: "cw-modal-list__item" });
+        this.listen(item, () => {
+          this.close();
+          void this.plugin.app.workspace.getLeaf(false).openFile(file);
+        });
+      } else list.createDiv({ text: path, cls: "cw-modal-list__item is-static" });
+    }
+    if (this.paths.length > 500) this.contentEl.createDiv({ text: t("\u4EC5\u663E\u793A\u524D 500 \u9879"), cls: "cw-modal-note" });
+    const footer = this.contentEl.createDiv({ cls: "cw-modal-footer" });
+    const close = footer.createEl("button", { text: t("\u5173\u95ED"), cls: "mod-cta" });
+    this.listen(close, () => this.close());
+  }
+  onClose() {
+    for (const cleanup of this.cleanups) cleanup();
+    this.cleanups = [];
+    this.contentEl.empty();
+  }
+  listen(element, callback) {
+    element.addEventListener("click", callback);
+    this.cleanups.push(() => element.removeEventListener("click", callback));
+  }
+};
+
 // src/components/registry.ts
 function paramString(value, fallback = "") {
   return typeof value === "string" || typeof value === "number" || typeof value === "boolean" ? String(value) : fallback;
@@ -261,22 +309,29 @@ function paramNumber(value, fallback) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
 }
-function metric(container, label, value, paths, plugin) {
+var STAT_KEYS = ["notes", "attachments", "folders", "recent", "words", "links", "orphans", "empty"];
+var STAT_LABELS = {
+  notes: "\u7B14\u8BB0",
+  attachments: "\u9644\u4EF6",
+  folders: "\u6587\u4EF6\u5939",
+  recent: "\u6700\u8FD1\u65B0\u589E",
+  words: "\u53EF\u8BFB\u5B57\u6570",
+  links: "\u94FE\u63A5",
+  orphans: "\u5B64\u7ACB\u7B14\u8BB0",
+  empty: "\u7A7A\u7B14\u8BB0"
+};
+function selectedStats(value) {
+  if (!Array.isArray(value)) return [...STAT_KEYS];
+  const selected = value.filter((item) => typeof item === "string" && STAT_KEYS.includes(item));
+  return selected.length ? selected : [...STAT_KEYS];
+}
+function metric(container, label, value, paths, plugin, host) {
   const button = container.createEl("button", { cls: "cw-metric" });
   button.createSpan({ cls: "cw-metric__value", text: value.toLocaleString() });
   button.createSpan({ cls: "cw-metric__label", text: label });
-  if (paths.length) button.addEventListener("click", () => showPaths(container, paths, plugin));
-}
-function showPaths(container, paths, plugin) {
-  const existing = container.querySelector(".cw-detail");
-  existing == null ? void 0 : existing.remove();
-  const list = container.createDiv({ cls: "cw-detail" });
-  for (const path of paths.slice(0, 100)) {
-    const item = list.createEl("button", { text: path, cls: "cw-link-button" });
-    item.addEventListener("click", () => {
-      const file = plugin.index.find(path);
-      if (file) void plugin.app.workspace.getLeaf(false).openFile(file);
-    });
+  if (paths.length) {
+    button.addClass("is-clickable");
+    host.registerDomEvent(button, "click", () => new DetailModal(plugin.app, label, paths, plugin).open());
   }
 }
 var vaultStats = {
@@ -285,18 +340,19 @@ var vaultStats = {
   icon: "database",
   description: "",
   params: [],
-  async render(container, _block, _host, plugin) {
+  async render(container, block, host, plugin) {
     const data = await plugin.index.metrics();
     await plugin.recordHistory(data);
     const grid = container.createDiv({ cls: "cw-metrics" });
-    metric(grid, t("\u7B14\u8BB0"), data.notes, [], plugin);
-    metric(grid, t("\u9644\u4EF6"), data.attachments, [], plugin);
-    metric(grid, t("\u6587\u4EF6\u5939"), data.folders, [], plugin);
-    metric(grid, t("\u6700\u8FD1\u65B0\u589E"), data.recent, [], plugin);
-    metric(grid, t("\u53EF\u8BFB\u5B57\u6570"), data.words, [], plugin);
-    metric(grid, t("\u94FE\u63A5"), data.links, [], plugin);
-    metric(grid, t("\u5B64\u7ACB\u7B14\u8BB0"), data.orphanPaths.length, data.orphanPaths, plugin);
-    metric(grid, t("\u7A7A\u7B14\u8BB0"), data.emptyPaths.length, data.emptyPaths, plugin);
+    const selected = selectedStats(block.params.items);
+    if (selected.includes("notes")) metric(grid, t("\u7B14\u8BB0"), data.notes, data.notePaths, plugin, host);
+    if (selected.includes("attachments")) metric(grid, t("\u9644\u4EF6"), data.attachments, data.attachmentPaths, plugin, host);
+    if (selected.includes("folders")) metric(grid, t("\u6587\u4EF6\u5939"), data.folders, data.folderPaths, plugin, host);
+    if (selected.includes("recent")) metric(grid, t("\u6700\u8FD1\u65B0\u589E"), data.recent, data.recentPaths, plugin, host);
+    if (selected.includes("words")) metric(grid, t("\u53EF\u8BFB\u5B57\u6570"), data.words, data.notePaths, plugin, host);
+    if (selected.includes("links")) metric(grid, t("\u94FE\u63A5"), data.links, data.linkedPaths, plugin, host);
+    if (selected.includes("orphans")) metric(grid, t("\u5B64\u7ACB\u7B14\u8BB0"), data.orphanPaths.length, data.orphanPaths, plugin, host);
+    if (selected.includes("empty")) metric(grid, t("\u7A7A\u7B14\u8BB0"), data.emptyPaths.length, data.emptyPaths, plugin, host);
   }
 };
 var quickJump = {
@@ -343,7 +399,7 @@ var commandButtons = {
       const command = paramString(definition.command);
       const known = plugin.commands.list().some((item) => item.id === command);
       const button = wrapper.createEl("button", { text: paramString(definition.label, command), cls: "mod-cta" });
-      if (definition.icon) (0, import_obsidian3.setIcon)(button.createSpan({ cls: "cw-button-icon" }), paramString(definition.icon));
+      if (definition.icon) (0, import_obsidian4.setIcon)(button.createSpan({ cls: "cw-button-icon" }), paramString(definition.icon));
       button.disabled = !known;
       button.addEventListener("click", () => {
         var _a;
@@ -359,12 +415,12 @@ var health = {
   icon: "heart-pulse",
   description: "",
   params: [],
-  async render(container, _block, _host, plugin) {
+  async render(container, _block, host, plugin) {
     const data = await plugin.index.metrics();
     const grid = container.createDiv({ cls: "cw-metrics" });
-    metric(grid, t("\u5B64\u7ACB\u7B14\u8BB0"), data.orphanPaths.length, data.orphanPaths, plugin);
-    metric(grid, t("\u7A7A\u7B14\u8BB0"), data.emptyPaths.length, data.emptyPaths, plugin);
-    metric(grid, t("\u77ED\u7B14\u8BB0"), data.shortPaths.length, data.shortPaths, plugin);
+    metric(grid, t("\u5B64\u7ACB\u7B14\u8BB0"), data.orphanPaths.length, data.orphanPaths, plugin, host);
+    metric(grid, t("\u7A7A\u7B14\u8BB0"), data.emptyPaths.length, data.emptyPaths, plugin, host);
+    metric(grid, t("\u77ED\u7B14\u8BB0"), data.shortPaths.length, data.shortPaths, plugin, host);
   }
 };
 var graph = {
@@ -372,14 +428,47 @@ var graph = {
   name: "\u77E5\u8BC6\u56FE\u8C31",
   icon: "git-fork",
   description: "",
-  params: [],
-  async render(container, _block, _host, plugin) {
-    if (!plugin.commands.available()) {
-      unavailable(container, t("\u547D\u4EE4\u63A5\u53E3\u4E0D\u53EF\u7528"));
+  params: [{ key: "file", type: "note", defaultValue: "" }],
+  async render(container, block, host, plugin) {
+    var _a, _b, _c, _d;
+    const resolved = plugin.app.metadataCache.resolvedLinks;
+    const configured = paramString(block.params.file);
+    let active = configured ? plugin.index.find(configured) : plugin.app.workspace.getActiveFile();
+    if (!active) {
+      const degrees = /* @__PURE__ */ new Map();
+      for (const [source, targets] of Object.entries(resolved)) {
+        degrees.set(source, ((_a = degrees.get(source)) != null ? _a : 0) + Object.keys(targets).length);
+        for (const [target, count] of Object.entries(targets)) degrees.set(target, ((_b = degrees.get(target)) != null ? _b : 0) + count);
+      }
+      const rootPath = (_c = [...degrees.entries()].sort((a, b) => b[1] - a[1])[0]) == null ? void 0 : _c[0];
+      active = rootPath ? plugin.index.find(rootPath) : null;
+    }
+    if (!active) {
+      unavailable(container, t("\u4ED3\u5E93\u91CC\u8FD8\u6CA1\u6709\u53EF\u9884\u89C8\u7684\u94FE\u63A5\u5173\u7CFB"));
       return;
     }
-    const button = container.createEl("button", { text: t("\u6253\u5F00"), cls: "mod-cta" });
-    button.addEventListener("click", () => plugin.commands.execute("graph:open"));
+    const outgoing = Object.keys((_d = resolved[active.path]) != null ? _d : {});
+    const incoming = Object.entries(resolved).filter(([, targets]) => active.path in targets).map(([path]) => path);
+    const paths = [.../* @__PURE__ */ new Set([...outgoing, ...incoming])].filter((path) => path !== active.path).slice(0, 12);
+    const preview = container.createDiv({ cls: "cw-graph-preview" });
+    const lines = preview.createSvg("svg", { cls: "cw-graph-preview__lines", attr: { viewBox: "0 0 100 100", preserveAspectRatio: "none", "aria-hidden": "true" } });
+    const center = preview.createEl("button", { text: active.basename, cls: "cw-graph-node cw-graph-node--center" });
+    host.registerDomEvent(center, "click", () => void plugin.app.workspace.getLeaf(false).openFile(active));
+    paths.forEach((path, index) => {
+      var _a2, _b2;
+      const angle = index / Math.max(paths.length, 1) * Math.PI * 2 - Math.PI / 2;
+      const x = 50 + Math.cos(angle) * 39;
+      const y = 50 + Math.sin(angle) * 38;
+      lines.createSvg("line", { attr: { x1: "50", y1: "50", x2: String(x), y2: String(y) } });
+      const node = preview.createEl("button", { text: (_b2 = (_a2 = path.split("/").pop()) == null ? void 0 : _a2.replace(/\.md$/i, "")) != null ? _b2 : path, cls: "cw-graph-node" });
+      node.style.setProperty("--cw-node-x", `${x}%`);
+      node.style.setProperty("--cw-node-y", `${y}%`);
+      host.registerDomEvent(node, "click", () => {
+        const file = plugin.index.find(path);
+        if (file) void plugin.app.workspace.getLeaf(false).openFile(file);
+      });
+    });
+    if (!paths.length) preview.createDiv({ text: t("\u5F53\u524D\u7B14\u8BB0\u6682\u65E0\u5DF2\u89E3\u6790\u5173\u7CFB"), cls: "cw-graph-empty" });
   }
 };
 var templater = {
@@ -402,7 +491,7 @@ var templater = {
     const button = container.createEl("button", { text: t("\u5FEB\u901F\u65B0\u5EFA"), cls: "mod-cta" });
     button.addEventListener("click", () => {
       const filename = renderFilenamePattern(paramString(block.params.filename, "{{date:YYYY-MM-DD}}"), paramString(block.params.title), (format) => moment().format(format));
-      void api.create_new_note_from_template(paramString(block.params.template), paramString(block.params.folder), filename, true).catch((error) => new import_obsidian3.Notice(error instanceof Error ? error.message : String(error)));
+      void api.create_new_note_from_template(paramString(block.params.template), paramString(block.params.folder), filename, true).catch((error) => new import_obsidian4.Notice(error instanceof Error ? error.message : String(error)));
     });
   }
 };
@@ -434,7 +523,7 @@ var baseView = {
       unavailable(container, t("\u7EC4\u4EF6\u4E0D\u53EF\u7528"));
       return;
     }
-    await import_obsidian3.MarkdownRenderer.render(plugin.app, `![[${path}]]`, container, "", host);
+    await import_obsidian4.MarkdownRenderer.render(plugin.app, `![[${path}]]`, container, "", host);
     const open = container.createEl("button", { text: t("\u6253\u5F00"), cls: "cw-link-button" });
     open.addEventListener("click", () => {
       const file = plugin.index.find(path);
@@ -515,7 +604,7 @@ function scriptDefinition(filename, name, icon, description, params) {
 }
 function addParamSetting(parent, definition, block, onChange) {
   var _a;
-  const setting = new import_obsidian3.Setting(parent).setName(definition.key);
+  const setting = new import_obsidian4.Setting(parent).setName(definition.key);
   const value = (_a = block.params[definition.key]) != null ? _a : definition.defaultValue;
   if (definition.type === "boolean") setting.addToggle((toggle) => toggle.setValue(Boolean(value)).onChange(async (next) => {
     block.params[definition.key] = next;
@@ -545,7 +634,7 @@ function unavailable(container, message) {
 }
 
 // src/workspace/layout.ts
-var SPANS = [4, 6, 12];
+var SPANS = [3, 4, 6, 12];
 function moveBlock(blocks, index, offset) {
   const target = index + offset;
   if (index < 0 || index >= blocks.length || target < 0 || target >= blocks.length) return [...blocks];
@@ -559,7 +648,7 @@ function cycleSpan(span, direction) {
 }
 
 // src/render/workspace-renderer.ts
-var WorkspaceRenderer = class extends import_obsidian4.Component {
+var WorkspaceRenderer = class extends import_obsidian5.Component {
   constructor(plugin, container, editing) {
     super();
     this.plugin = plugin;
@@ -571,10 +660,11 @@ var WorkspaceRenderer = class extends import_obsidian4.Component {
       this.removeChild(this.scope);
       this.scope.unload();
     }
-    this.scope = new import_obsidian4.Component();
+    this.scope = new import_obsidian5.Component();
     this.addChild(this.scope);
     this.container.empty();
     this.container.toggleClass("is-editing", this.editing());
+    if (this.editing()) this.container.createDiv({ text: t("\u6B63\u5728\u7F16\u8F91\u5DE5\u4F5C\u53F0"), cls: "cw-edit-banner" });
     for (const [index, block] of this.plugin.data.workspace.blocks.entries()) this.renderBlock(block, index, this.scope);
     if (this.editing()) this.renderAdd(this.scope);
   }
@@ -584,14 +674,14 @@ var WorkspaceRenderer = class extends import_obsidian4.Component {
     const definition = this.plugin.definition(block.componentId);
     const header = card.createDiv({ cls: "cw-block__header" });
     const title = header.createDiv({ cls: "cw-block__title" });
-    if (definition) (0, import_obsidian4.setIcon)(title.createSpan({ cls: "cw-block__icon" }), definition.icon);
+    if (definition) (0, import_obsidian5.setIcon)(title.createSpan({ cls: "cw-block__icon" }), definition.icon);
     title.createSpan({ text: block.title || (definition ? componentName(definition) : t("\u672A\u77E5\u7EC4\u4EF6")) });
     if (this.editing()) this.renderControls(header, card, block, index, (_a = definition == null ? void 0 : definition.params) != null ? _a : [], scope);
     const body = card.createDiv({ cls: "cw-block__body" });
     body.createDiv({ text: t("\u52A0\u8F7D\u4E2D\u2026"), cls: "cw-loading" });
     const render = async () => {
       body.empty();
-      const child = new import_obsidian4.Component();
+      const child = new import_obsidian5.Component();
       scope.addChild(child);
       if (!definition) {
         body.createDiv({ text: t("\u672A\u77E5\u7EC4\u4EF6"), cls: "cw-unavailable" });
@@ -627,17 +717,18 @@ ${detail}` : detail, cls: "cw-error" });
     const controls = header.createDiv({ cls: "cw-block__controls" });
     const button = (icon, label, action) => {
       const element = controls.createEl("button", { attr: { "aria-label": label, title: label } });
-      (0, import_obsidian4.setIcon)(element, icon);
+      (0, import_obsidian5.setIcon)(element, icon);
       element.addEventListener("click", action);
       return element;
     };
     button("arrow-up", t("\u4E0A\u79FB"), () => void this.move(index, -1));
     button("arrow-down", t("\u4E0B\u79FB"), () => void this.move(index, 1));
-    const span = button("columns-3", block.span === 12 ? t("\u6574\u884C") : block.span === 6 ? t("\u534A\u884C") : t("\u4E09\u5206\u4E4B\u4E00"), () => void this.changeSpan(block, 1));
-    span.addEventListener("contextmenu", (event) => {
-      event.preventDefault();
-      void this.changeSpan(block, -1);
-    });
+    const widths = controls.createDiv({ cls: "cw-width-options", attr: { "aria-label": t("\u7EC4\u4EF6\u5BBD\u5EA6") } });
+    const widthOptions = [[3, t("\u56DB\u5206\u4E4B\u4E00")], [4, t("\u4E09\u5206\u4E4B\u4E00")], [6, t("\u534A\u884C")], [12, t("\u6574\u884C")]];
+    for (const [span, label] of widthOptions) {
+      const option = widths.createEl("button", { text: label, cls: block.span === span ? "is-active" : "" });
+      scope.registerDomEvent(option, "click", () => void this.setSpan(block, span));
+    }
     button("settings-2", t("\u914D\u7F6E"), () => this.toggleConfig(card, block, params, scope));
     button("trash-2", t("\u5220\u9664"), () => void this.remove(index));
     scope.registerDomEvent(card, "keydown", (event) => {
@@ -668,13 +759,17 @@ ${detail}` : detail, cls: "cw-error" });
       return;
     }
     const config = card.createDiv({ cls: "cw-block__config" });
-    new import_obsidian4.Setting(config).setName(t("\u6807\u9898")).addText((text) => {
+    new import_obsidian5.Setting(config).setName(t("\u6807\u9898")).addText((text) => {
       var _a;
       return text.setValue((_a = block.title) != null ? _a : "").onChange(async (value) => {
         block.title = value || void 0;
         await this.plugin.persist();
       });
     });
+    if (block.componentId === "builtin/vault-stats") {
+      this.renderStatsEditor(config, block);
+      return;
+    }
     if (block.componentId === "builtin/command-buttons") {
       this.renderCommandEditor(config, block);
       return;
@@ -685,6 +780,19 @@ ${detail}` : detail, cls: "cw-error" });
     }
     for (const param of params) addParamSetting(config, param, block, async () => this.persist());
   }
+  renderStatsEditor(container, block) {
+    const selected = new Set(selectedStats(block.params.items));
+    const group = container.createDiv({ cls: "cw-stats-editor" });
+    group.createEl("h4", { text: t("\u7EDF\u8BA1\u9879") });
+    for (const [key, label] of Object.entries(STAT_LABELS)) {
+      new import_obsidian5.Setting(group).setName(t(label)).addToggle((toggle) => toggle.setValue(selected.has(key)).onChange(async (enabled) => {
+        if (enabled) selected.add(key);
+        else selected.delete(key);
+        block.params.items = [...selected];
+        await this.plugin.persist();
+      }));
+    }
+  }
   renderCommandEditor(container, block) {
     const values = Array.isArray(block.params.buttons) ? block.params.buttons.filter((value) => typeof value === "object" && value !== null && !Array.isArray(value)) : [];
     const draw = () => {
@@ -693,11 +801,11 @@ ${detail}` : detail, cls: "cw-error" });
       const editor = container.createDiv({ cls: "cw-command-editor" });
       values.forEach((value, index) => {
         const row = editor.createDiv({ cls: "cw-command-editor__row" });
-        new import_obsidian4.Setting(row).setName(t("\u663E\u793A\u540D")).addText((text) => text.setValue(typeof value.label === "string" ? value.label : "").onChange(async (next) => {
+        new import_obsidian5.Setting(row).setName(t("\u663E\u793A\u540D")).addText((text) => text.setValue(typeof value.label === "string" ? value.label : "").onChange(async (next) => {
           value.label = next;
           await this.plugin.persist();
         }));
-        new import_obsidian4.Setting(row).setName(t("\u547D\u4EE4")).addDropdown((dropdown) => {
+        new import_obsidian5.Setting(row).setName(t("\u547D\u4EE4")).addDropdown((dropdown) => {
           dropdown.addOption("", t("\u8BF7\u9009\u62E9\u547D\u4EE4"));
           for (const command of this.plugin.commands.list()) dropdown.addOption(command.id, command.name);
           dropdown.setValue(typeof value.command === "string" ? value.command : "").onChange(async (next) => {
@@ -705,18 +813,18 @@ ${detail}` : detail, cls: "cw-error" });
             await this.plugin.persist();
           });
         });
-        new import_obsidian4.Setting(row).setName(t("\u8981\u786E\u8BA4")).addToggle((toggle) => toggle.setValue(value.confirm === true).onChange(async (next) => {
+        new import_obsidian5.Setting(row).setName(t("\u8981\u786E\u8BA4")).addToggle((toggle) => toggle.setValue(value.confirm === true).onChange(async (next) => {
           value.confirm = next;
           await this.plugin.persist();
         }));
-        new import_obsidian4.Setting(row).addButton((button) => button.setButtonText(t("\u5220\u9664")).onClick(async () => {
+        new import_obsidian5.Setting(row).addButton((button) => button.setButtonText(t("\u5220\u9664")).onClick(async () => {
           values.splice(index, 1);
           block.params.buttons = values;
           await this.plugin.persist();
           draw();
         }));
       });
-      new import_obsidian4.Setting(editor).addButton((button) => button.setButtonText(t("\u6DFB\u52A0\u6309\u94AE")).setCta().onClick(async () => {
+      new import_obsidian5.Setting(editor).addButton((button) => button.setButtonText(t("\u6DFB\u52A0\u6309\u94AE")).setCta().onClick(async () => {
         values.push({ label: "", command: "", confirm: false });
         block.params.buttons = values;
         await this.plugin.persist();
@@ -733,7 +841,7 @@ ${detail}` : detail, cls: "cw-error" });
       draft = area.value;
     });
     const preview = container.createDiv({ cls: "cw-dataview-preview" });
-    new import_obsidian4.Setting(container).addButton((button) => button.setButtonText(t("\u8BD5\u8FD0\u884C\u5E76\u4FDD\u5B58")).setCta().onClick(async () => {
+    new import_obsidian5.Setting(container).addButton((button) => button.setButtonText(t("\u8BD5\u8FD0\u884C\u5E76\u4FDD\u5B58")).setCta().onClick(async () => {
       var _a, _b;
       preview.empty();
       const api = this.plugin.bridge.dataview();
@@ -741,7 +849,7 @@ ${detail}` : detail, cls: "cw-error" });
         preview.setText(t("\u9700\u8981 Dataview \u63D2\u4EF6"));
         return;
       }
-      const child = new import_obsidian4.Component();
+      const child = new import_obsidian5.Component();
       scope.addChild(child);
       try {
         await api.executeJs(draft, preview, child, (_b = (_a = this.plugin.app.workspace.getActiveFile()) == null ? void 0 : _a.path) != null ? _b : "");
@@ -759,7 +867,7 @@ ${detail}` : detail, cls: "cw-error" });
     for (const definition of this.plugin.definitions()) {
       const button = section.createEl("button", { text: componentName(definition) });
       const icon = button.createSpan({ cls: "cw-button-icon" });
-      (0, import_obsidian4.setIcon)(icon, definition.icon);
+      (0, import_obsidian5.setIcon)(icon, definition.icon);
       scope.registerDomEvent(button, "click", () => void this.plugin.addBlock(definition));
     }
   }
@@ -769,6 +877,10 @@ ${detail}` : detail, cls: "cw-error" });
   }
   async changeSpan(block, direction) {
     block.span = cycleSpan(block.span, direction);
+    await this.persist();
+  }
+  async setSpan(block, span) {
+    block.span = span;
     await this.persist();
   }
   async remove(index) {
@@ -783,7 +895,7 @@ ${detail}` : detail, cls: "cw-error" });
 
 // src/views/workspace-view.ts
 var WORKSPACE_VIEW_TYPE = "cw-workspace";
-var CustomWorkspaceView = class extends import_obsidian5.ItemView {
+var CustomWorkspaceView = class extends import_obsidian6.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.plugin = plugin;
@@ -800,16 +912,15 @@ var CustomWorkspaceView = class extends import_obsidian5.ItemView {
   }
   async onOpen() {
     this.contentEl.addClass("cw-root", `cw-density-${this.plugin.config.density}`);
-    this.addAction("pencil", t("\u7F16\u8F91\u6A21\u5F0F"), () => {
-      this.editing = !this.editing;
-      void this.refresh();
-    });
+    this.modeAction = this.addAction("pencil", t("\u7F16\u8F91\u6A21\u5F0F"), () => this.toggleEditing());
+    this.modeAction.addClass("cw-mode-toggle");
     this.renderer = new WorkspaceRenderer(this.plugin, this.contentEl, () => this.editing);
     this.addChild(this.renderer);
     await this.renderer.render();
   }
   async onClose() {
     this.renderer = void 0;
+    this.modeAction = void 0;
     this.contentEl.empty();
   }
   async refresh() {
@@ -818,7 +929,16 @@ var CustomWorkspaceView = class extends import_obsidian5.ItemView {
   }
   toggleEditing() {
     this.editing = !this.editing;
+    this.updateModeAction();
     void this.refresh();
+  }
+  updateModeAction() {
+    if (!this.modeAction) return;
+    (0, import_obsidian6.setIcon)(this.modeAction, this.editing ? "check" : "pencil");
+    const label = this.editing ? t("\u5B8C\u6210\u7F16\u8F91") : t("\u7F16\u8F91\u6A21\u5F0F");
+    this.modeAction.setAttribute("aria-label", label);
+    this.modeAction.setAttribute("title", label);
+    this.modeAction.toggleClass("is-editing", this.editing);
   }
 };
 
@@ -880,7 +1000,7 @@ function migrateData(value) {
   };
 }
 function isBlock(value) {
-  return isRecord(value) && typeof value.id === "string" && typeof value.componentId === "string" && [4, 6, 12].includes(Number(value.span)) && isRecord(value.params);
+  return isRecord(value) && typeof value.id === "string" && typeof value.componentId === "string" && [3, 4, 6, 12].includes(Number(value.span)) && isRecord(value.params);
 }
 function isSnapshot(value) {
   return isRecord(value) && typeof value.date === "string" && typeof value.notes === "number" && typeof value.links === "number" && typeof value.words === "number";
@@ -930,7 +1050,7 @@ var PluginBridge = class {
 };
 
 // src/services/vault-index.ts
-var import_obsidian6 = require("obsidian");
+var import_obsidian7 = require("obsidian");
 
 // src/metrics/text.ts
 function stripMarkdown(input) {
@@ -946,15 +1066,20 @@ function countReadableWords(input) {
 }
 
 // src/metrics/aggregate.ts
-function aggregateMetrics(notes, attachments, folders, now, recentDays, shortThreshold) {
+function aggregateMetrics(notes, attachmentPaths, folderPaths, now, recentDays, shortThreshold) {
   const recentCutoff = now - recentDays * 864e5;
   return {
     notes: notes.length,
-    attachments,
-    folders,
+    attachments: attachmentPaths.length,
+    folders: folderPaths.length,
     recent: notes.filter((note) => note.ctime >= recentCutoff).length,
     words: notes.reduce((sum, note) => sum + note.words, 0),
     links: notes.reduce((sum, note) => sum + note.outgoing, 0),
+    notePaths: notes.map((note) => note.path),
+    attachmentPaths,
+    folderPaths,
+    recentPaths: notes.filter((note) => note.ctime >= recentCutoff).map((note) => note.path),
+    linkedPaths: notes.filter((note) => note.outgoing > 0).map((note) => note.path),
     orphanPaths: notes.filter((note) => note.outgoing === 0 && note.incoming === 0).map((note) => note.path),
     emptyPaths: notes.filter((note) => note.words === 0).map((note) => note.path),
     shortPaths: notes.filter((note) => note.words <= shortThreshold).map((note) => note.path)
@@ -997,18 +1122,19 @@ var VaultIndex = class {
       };
     }));
     const files = this.app.vault.getFiles().filter((file) => this.included(file.path));
-    const folders = new Set(files.map((file) => {
+    const attachmentPaths = files.filter((file) => file.extension !== "md").map((file) => file.path);
+    const folderPaths = [...new Set(files.map((file) => {
       var _a2;
       return (_a2 = file.parent) == null ? void 0 : _a2.path;
-    }).filter((path) => Boolean(path))).size;
-    return aggregateMetrics(notes, files.length - markdown.length, folders, Date.now(), this.recentDays(), this.threshold());
+    }).filter((path) => Boolean(path)))];
+    return aggregateMetrics(notes, attachmentPaths, folderPaths, Date.now(), this.recentDays(), this.threshold());
   }
   recentNotes(limit, folder = "") {
     return this.app.vault.getMarkdownFiles().filter((file) => this.included(file.path) && (!folder || file.path.startsWith(`${folder}/`))).sort((a, b) => b.stat.mtime - a.stat.mtime).slice(0, limit);
   }
   find(path) {
     const file = this.app.vault.getAbstractFileByPath(path);
-    return file instanceof import_obsidian6.TFile ? file : null;
+    return file instanceof import_obsidian7.TFile ? file : null;
   }
 };
 
@@ -1064,7 +1190,7 @@ function estimateHistory(notes) {
 }
 
 // src/main.ts
-var CustomWorkspacePlugin = class extends import_obsidian7.Plugin {
+var CustomWorkspacePlugin = class extends import_obsidian8.Plugin {
   constructor() {
     super(...arguments);
     this.data = structuredClone(DEFAULT_DATA);
@@ -1153,13 +1279,13 @@ var CustomWorkspacePlugin = class extends import_obsidian7.Plugin {
   }
   scriptDirectory() {
     var _a;
-    return (0, import_obsidian7.normalizePath)(`${(_a = this.manifest.dir) != null ? _a : `${this.app.vault.configDir}/plugins/${this.manifest.id}`}/data`);
+    return (0, import_obsidian8.normalizePath)(`${(_a = this.manifest.dir) != null ? _a : `${this.app.vault.configDir}/plugins/${this.manifest.id}`}/data`);
   }
   async ensureScriptDirectory() {
     const adapter = this.app.vault.adapter;
     const directory = this.scriptDirectory();
     if (!await adapter.exists(directory)) await adapter.mkdir(directory);
-    const readme = (0, import_obsidian7.normalizePath)(`${directory}/README.md`);
+    const readme = (0, import_obsidian8.normalizePath)(`${directory}/README.md`);
     if (!await adapter.exists(readme)) await adapter.write(readme, "# Custom Workspace scripts\n\nPlace trusted `.js` files here. Scripts can read and write your vault and are not sandboxed.\n");
   }
   async reloadScripts() {
@@ -1177,13 +1303,13 @@ var CustomWorkspacePlugin = class extends import_obsidian7.Plugin {
     }
   }
   async readScript(filename) {
-    return this.app.vault.adapter.read((0, import_obsidian7.normalizePath)(`${this.scriptDirectory()}/${filename}`));
+    return this.app.vault.adapter.read((0, import_obsidian8.normalizePath)(`${this.scriptDirectory()}/${filename}`));
   }
   async createScript() {
     const adapter = this.app.vault.adapter;
     let index = 1;
     let filename = "my-component.js";
-    while (await adapter.exists((0, import_obsidian7.normalizePath)(`${this.scriptDirectory()}/${filename}`))) {
+    while (await adapter.exists((0, import_obsidian8.normalizePath)(`${this.scriptDirectory()}/${filename}`))) {
       index += 1;
       filename = `my-component-${index}.js`;
     }
@@ -1195,9 +1321,9 @@ var CustomWorkspacePlugin = class extends import_obsidian7.Plugin {
 const { container, params } = ctx;
 container.createEl("p", { text: String(params.title) });
 `;
-    await adapter.write((0, import_obsidian7.normalizePath)(`${this.scriptDirectory()}/${filename}`), source);
+    await adapter.write((0, import_obsidian8.normalizePath)(`${this.scriptDirectory()}/${filename}`), source);
     await this.reloadScripts();
-    new import_obsidian7.Notice(`${t("\u5DF2\u65B0\u5EFA\u811A\u672C")}: ${filename}`);
+    new import_obsidian8.Notice(`${t("\u5DF2\u65B0\u5EFA\u811A\u672C")}: ${filename}`);
   }
   async renderTasks(container, host) {
     if (!this.config.journalFolder) {
@@ -1234,7 +1360,7 @@ container.createEl("p", { text: String(params.title) });
     const leaf = this.app.workspace.getLeaf(false);
     await leaf.openFile(task.file);
     const view = leaf.view;
-    if (view instanceof import_obsidian7.MarkdownView) {
+    if (view instanceof import_obsidian8.MarkdownView) {
       view.editor.setCursor({ line: task.line, ch: 0 });
       view.editor.scrollIntoView({ from: { line: task.line, ch: 0 }, to: { line: task.line, ch: task.text.length } }, true);
     }
