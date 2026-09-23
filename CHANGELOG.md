@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.9
+
+- Rename the workspace tab to My Workspace and use a distinct home icon.
+- Restore drag-and-drop component reordering in edit mode.
+- Replace the cumulative word-count chart with a 30-day daily net-change chart centered on zero.
+- Prefer frontmatter `created` when reconstructing estimated history, preserve real snapshots during migration, and clarify that link-addition dates cannot be recovered.
+
 ## 0.1.8
 
 - Reuse the BRAT-tested release workflow from Obsidian Task Matrix.

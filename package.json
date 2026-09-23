@@ -1,6 +1,6 @@
 {
   "name": "custom-workspace",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "An immediately useful, locally rendered Obsidian workspace.",
   "main": "main.js",
   "scripts": {
