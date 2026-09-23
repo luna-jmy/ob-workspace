@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.7
+
+- Create the public GitHub release before uploading BRAT assets, avoiding GitHub's empty embedded asset list for draft-first releases.
+- Upload release assets sequentially and require the anonymous BRAT API response to expose all three files before the workflow succeeds.
+
 ## 0.1.6
 
 - Publish GitHub releases only after BRAT's required assets have finished uploading.
