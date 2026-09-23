@@ -9,49 +9,49 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
-          cache: npm
+          node-version: 20
+
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run test
       - run: npm run build
+      - run: mkdir -p release && cp main.js manifest.json styles.css release/
+
       - name: Verify tag and manifest version
         run: test "${GITHUB_REF_NAME}" = "$(node -p "require('./manifest.json').version")"
-      - name: Create published release before uploading assets
-        env:
-          GH_TOKEN: ${{ github.token }}
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Extract changelog for this version
+        id: changelog
         run: |
-          gh release create "${GITHUB_REF_NAME}" \
-            --verify-tag \
-            --title "${GITHUB_REF_NAME}" \
-            --notes "BRAT test release ${GITHUB_REF_NAME}."
-          test "$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${GITHUB_REF_NAME}" --jq .draft)" = "false"
-      - name: Upload release assets sequentially
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release upload "${GITHUB_REF_NAME}" main.js
-          gh release upload "${GITHUB_REF_NAME}" manifest.json
-          gh release upload "${GITHUB_REF_NAME}" styles.css
-      - name: Verify anonymous BRAT release metadata
-        run: |
-          for attempt in {1..12}; do
-            assets="$(curl --fail --silent --show-error \
-              -H 'User-Agent: Obsidian/BRAT-Plugin' \
-              -H 'Accept: application/vnd.github.v3+json' \
-              "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${GITHUB_REF_NAME}?cache_bust=${GITHUB_RUN_ID}-${attempt}" \
-              | jq -r '[.assets[].name] | sort | join(",")')"
-            if test "${assets}" = "main.js,manifest.json,styles.css"; then
-              exit 0
-            fi
-            sleep 5
-          done
-          echo "BRAT release metadata did not expose all assets: ${assets}" >&2
-          exit 1
+          delimiter="$(openssl rand -hex 8)"
+          {
+            echo "BODY<<${delimiter}"
+            awk "/^## ${GITHUB_REF_NAME}/{found=1; next} /^## /{found=0} found{print}" CHANGELOG.md
+            echo "${delimiter}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.VERSION }}
+          name: ${{ steps.version.outputs.VERSION }}
+          body: ${{ steps.changelog.outputs.BODY }}
+          files: |
+            release/main.js
+            release/manifest.json
+            release/styles.css
