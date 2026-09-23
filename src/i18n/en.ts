@@ -1,5 +1,5 @@
 export const en: Record<string, string> = {
-  "自定义工作台": "Custom Workspace",
+  "我的工作台": "My Workspace",
   "打开工作台": "Open workspace",
   "切换编辑模式": "Toggle edit mode",
   "编辑模式": "Edit mode",

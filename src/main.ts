@@ -31,7 +31,7 @@ export default class CustomWorkspacePlugin extends Plugin {
     this.data = migrateData(await this.loadData()); this.config = this.data.settings; setLanguage(this.config.language);
     await this.ensureScriptDirectory(); await this.reloadScripts();
     this.registerView(WORKSPACE_VIEW_TYPE, (leaf) => new CustomWorkspaceView(leaf, this));
-    this.addRibbonIcon("layout-dashboard", t("打开工作台"), () => void this.openWorkspace(false));
+    this.addRibbonIcon("home", t("打开工作台"), () => void this.openWorkspace(false));
     this.addCommand({ id: "open-workspace", name: t("打开工作台"), callback: () => void this.openWorkspace(false) });
     this.addCommand({ id: "toggle-edit-mode", name: t("切换编辑模式"), checkCallback: (checking) => {
       const view = this.app.workspace.getLeavesOfType(WORKSPACE_VIEW_TYPE)[0]?.view;

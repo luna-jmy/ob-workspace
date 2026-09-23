@@ -29,7 +29,7 @@ var import_obsidian2 = require("obsidian");
 
 // src/i18n/en.ts
 var en = {
-  "\u81EA\u5B9A\u4E49\u5DE5\u4F5C\u53F0": "Custom Workspace",
+  "\u6211\u7684\u5DE5\u4F5C\u53F0": "My Workspace",
   "\u6253\u5F00\u5DE5\u4F5C\u53F0": "Open workspace",
   "\u5207\u6362\u7F16\u8F91\u6A21\u5F0F": "Toggle edit mode",
   "\u7F16\u8F91\u6A21\u5F0F": "Edit mode",
@@ -1215,10 +1215,10 @@ var CustomWorkspaceView = class extends import_obsidian6.ItemView {
     return WORKSPACE_VIEW_TYPE;
   }
   getDisplayText() {
-    return t("\u81EA\u5B9A\u4E49\u5DE5\u4F5C\u53F0");
+    return t("\u6211\u7684\u5DE5\u4F5C\u53F0");
   }
   getIcon() {
-    return "layout-dashboard";
+    return "home";
   }
   async onOpen() {
     this.contentEl.addClass("cw-root", `cw-density-${this.plugin.config.density}`);
@@ -1541,7 +1541,7 @@ var CustomWorkspacePlugin = class extends import_obsidian8.Plugin {
     await this.ensureScriptDirectory();
     await this.reloadScripts();
     this.registerView(WORKSPACE_VIEW_TYPE, (leaf) => new CustomWorkspaceView(leaf, this));
-    this.addRibbonIcon("layout-dashboard", t("\u6253\u5F00\u5DE5\u4F5C\u53F0"), () => void this.openWorkspace(false));
+    this.addRibbonIcon("home", t("\u6253\u5F00\u5DE5\u4F5C\u53F0"), () => void this.openWorkspace(false));
     this.addCommand({ id: "open-workspace", name: t("\u6253\u5F00\u5DE5\u4F5C\u53F0"), callback: () => void this.openWorkspace(false) });
     this.addCommand({ id: "toggle-edit-mode", name: t("\u5207\u6362\u7F16\u8F91\u6A21\u5F0F"), checkCallback: (checking) => {
       var _a;

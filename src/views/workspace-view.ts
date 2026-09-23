@@ -11,8 +11,8 @@ export class CustomWorkspaceView extends ItemView {
   private modeAction?: HTMLElement;
   constructor(leaf: WorkspaceLeaf, private readonly plugin: CustomWorkspacePlugin) { super(leaf); }
   getViewType(): string { return WORKSPACE_VIEW_TYPE; }
-  getDisplayText(): string { return t("自定义工作台"); }
-  getIcon(): string { return "layout-dashboard"; }
+  getDisplayText(): string { return t("我的工作台"); }
+  getIcon(): string { return "home"; }
   async onOpen(): Promise<void> {
     this.contentEl.addClass("cw-root", `cw-density-${this.plugin.config.density}`);
     this.addAction("refresh-cw", t("刷新工作台"), () => void this.refreshWorkspace());
