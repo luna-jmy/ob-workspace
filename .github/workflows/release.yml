@@ -26,7 +26,20 @@ jobs:
         run: test "${GITHUB_REF_NAME}" = "$(node -p "require('./manifest.json').version")"
       - uses: softprops/action-gh-release@v2
         with:
+          draft: true
           files: |
             main.js
             manifest.json
             styles.css
+      - name: Publish release after assets are uploaded
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "${GITHUB_REF_NAME}" --draft=false
+      - name: Verify anonymous BRAT release metadata
+        run: |
+          assets="$(curl --fail --silent --show-error \
+            -H 'User-Agent: Obsidian/BRAT-Plugin' \
+            -H 'Accept: application/vnd.github.v3+json' \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${GITHUB_REF_NAME}" \
+            | jq -r '[.assets[].name] | sort | join(",")')"
+          test "${assets}" = "main.js,manifest.json,styles.css"
