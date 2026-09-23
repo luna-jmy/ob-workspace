@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.8
+
+- Reuse the BRAT-tested release workflow from Obsidian Task Matrix.
+- Stage release assets in `release/` and publish them together with explicit tag, title, and changelog metadata.
+
 ## 0.1.7
 
 - Create the public GitHub release before uploading BRAT assets, avoiding GitHub's empty embedded asset list for draft-first releases.
