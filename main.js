@@ -33,6 +33,7 @@ var en = {
   "\u6253\u5F00\u5DE5\u4F5C\u53F0": "Open workspace",
   "\u5207\u6362\u7F16\u8F91\u6A21\u5F0F": "Toggle edit mode",
   "\u7F16\u8F91\u6A21\u5F0F": "Edit mode",
+  "\u5237\u65B0\u5DE5\u4F5C\u53F0": "Refresh workspace",
   "\u5B8C\u6210\u7F16\u8F91": "Finish editing",
   "\u6B63\u5728\u7F16\u8F91\u5DE5\u4F5C\u53F0": "Editing workspace",
   "\u6DFB\u52A0\u7EC4\u4EF6": "Add component",
@@ -40,7 +41,6 @@ var en = {
   "\u4ECA\u65E5\u4EFB\u52A1": "Today's tasks",
   "\u5FEB\u901F\u8DF3\u8F6C": "Quick jump",
   "\u547D\u4EE4\u6309\u94AE": "Command buttons",
-  "\u7B14\u8BB0\u5065\u5EB7\u5EA6": "Note health",
   "\u5B57\u6570\u4E0E\u8D8B\u52BF": "Words & trends",
   "\u77E5\u8BC6\u56FE\u8C31": "Graph",
   "\u5FEB\u901F\u65B0\u5EFA": "Quick create",
@@ -112,8 +112,7 @@ var en = {
   "\u5C1A\u65E0\u547D\u4EE4\u6309\u94AE\uFF0C\u8BF7\u5728\u7F16\u8F91\u6A21\u5F0F\u914D\u7F6E\u3002": "No command buttons yet. Configure them in edit mode.",
   "\u6253\u5F00": "Open",
   "\u7EC4\u4EF6\u4E0D\u53EF\u7528": "Component unavailable",
-  "\u4ED3\u5E93\u91CC\u8FD8\u6CA1\u6709\u53EF\u9884\u89C8\u7684\u94FE\u63A5\u5173\u7CFB": "There are no link relationships to preview yet",
-  "\u5F53\u524D\u7B14\u8BB0\u6682\u65E0\u5DF2\u89E3\u6790\u5173\u7CFB": "This note has no resolved relationships",
+  "Obsidian \u6682\u672A\u63D0\u4F9B\u5D4C\u5165\u539F\u751F\u56FE\u8C31\u7684\u516C\u5F00\u63A5\u53E3": "Obsidian does not currently expose a public API for embedding the native graph",
   "\u4EC5\u663E\u793A\u524D 500 \u9879": "Showing the first 500 items only",
   "\u5173\u95ED": "Close",
   "\u672A\u77E5\u7EC4\u4EF6": "Unknown component",
@@ -309,7 +308,8 @@ function paramNumber(value, fallback) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
 }
-var STAT_KEYS = ["notes", "attachments", "folders", "recent", "words", "links", "orphans", "empty"];
+var STAT_KEYS = ["notes", "attachments", "folders", "recent", "words", "links", "orphans", "empty", "short"];
+var DEFAULT_STAT_KEYS = ["notes", "attachments", "folders", "recent", "words", "links", "orphans", "empty"];
 var STAT_LABELS = {
   notes: "\u7B14\u8BB0",
   attachments: "\u9644\u4EF6",
@@ -318,12 +318,13 @@ var STAT_LABELS = {
   words: "\u53EF\u8BFB\u5B57\u6570",
   links: "\u94FE\u63A5",
   orphans: "\u5B64\u7ACB\u7B14\u8BB0",
-  empty: "\u7A7A\u7B14\u8BB0"
+  empty: "\u7A7A\u7B14\u8BB0",
+  short: "\u77ED\u7B14\u8BB0"
 };
 function selectedStats(value) {
-  if (!Array.isArray(value)) return [...STAT_KEYS];
+  if (!Array.isArray(value)) return [...DEFAULT_STAT_KEYS];
   const selected = value.filter((item) => typeof item === "string" && STAT_KEYS.includes(item));
-  return selected.length ? selected : [...STAT_KEYS];
+  return selected;
 }
 function metric(container, label, value, paths, plugin, host) {
   const button = container.createEl("button", { cls: "cw-metric" });
@@ -353,6 +354,7 @@ var vaultStats = {
     if (selected.includes("links")) metric(grid, t("\u94FE\u63A5"), data.links, data.linkedPaths, plugin, host);
     if (selected.includes("orphans")) metric(grid, t("\u5B64\u7ACB\u7B14\u8BB0"), data.orphanPaths.length, data.orphanPaths, plugin, host);
     if (selected.includes("empty")) metric(grid, t("\u7A7A\u7B14\u8BB0"), data.emptyPaths.length, data.emptyPaths, plugin, host);
+    if (selected.includes("short")) metric(grid, t("\u77ED\u7B14\u8BB0"), data.shortPaths.length, data.shortPaths, plugin, host);
   }
 };
 var quickJump = {
@@ -409,66 +411,14 @@ var commandButtons = {
     }
   }
 };
-var health = {
-  id: "builtin/note-health",
-  name: "\u7B14\u8BB0\u5065\u5EB7\u5EA6",
-  icon: "heart-pulse",
-  description: "",
-  params: [],
-  async render(container, _block, host, plugin) {
-    const data = await plugin.index.metrics();
-    const grid = container.createDiv({ cls: "cw-metrics" });
-    metric(grid, t("\u5B64\u7ACB\u7B14\u8BB0"), data.orphanPaths.length, data.orphanPaths, plugin, host);
-    metric(grid, t("\u7A7A\u7B14\u8BB0"), data.emptyPaths.length, data.emptyPaths, plugin, host);
-    metric(grid, t("\u77ED\u7B14\u8BB0"), data.shortPaths.length, data.shortPaths, plugin, host);
-  }
-};
 var graph = {
   id: "builtin/graph",
   name: "\u77E5\u8BC6\u56FE\u8C31",
   icon: "git-fork",
   description: "",
-  params: [{ key: "file", type: "note", defaultValue: "" }],
-  async render(container, block, host, plugin) {
-    var _a, _b, _c, _d;
-    const resolved = plugin.app.metadataCache.resolvedLinks;
-    const configured = paramString(block.params.file);
-    let active = configured ? plugin.index.find(configured) : plugin.app.workspace.getActiveFile();
-    if (!active) {
-      const degrees = /* @__PURE__ */ new Map();
-      for (const [source, targets] of Object.entries(resolved)) {
-        degrees.set(source, ((_a = degrees.get(source)) != null ? _a : 0) + Object.keys(targets).length);
-        for (const [target, count] of Object.entries(targets)) degrees.set(target, ((_b = degrees.get(target)) != null ? _b : 0) + count);
-      }
-      const rootPath = (_c = [...degrees.entries()].sort((a, b) => b[1] - a[1])[0]) == null ? void 0 : _c[0];
-      active = rootPath ? plugin.index.find(rootPath) : null;
-    }
-    if (!active) {
-      unavailable(container, t("\u4ED3\u5E93\u91CC\u8FD8\u6CA1\u6709\u53EF\u9884\u89C8\u7684\u94FE\u63A5\u5173\u7CFB"));
-      return;
-    }
-    const outgoing = Object.keys((_d = resolved[active.path]) != null ? _d : {});
-    const incoming = Object.entries(resolved).filter(([, targets]) => active.path in targets).map(([path]) => path);
-    const paths = [.../* @__PURE__ */ new Set([...outgoing, ...incoming])].filter((path) => path !== active.path).slice(0, 12);
-    const preview = container.createDiv({ cls: "cw-graph-preview" });
-    const lines = preview.createSvg("svg", { cls: "cw-graph-preview__lines", attr: { viewBox: "0 0 100 100", preserveAspectRatio: "none", "aria-hidden": "true" } });
-    const center = preview.createEl("button", { text: active.basename, cls: "cw-graph-node cw-graph-node--center" });
-    host.registerDomEvent(center, "click", () => void plugin.app.workspace.getLeaf(false).openFile(active));
-    paths.forEach((path, index) => {
-      var _a2, _b2;
-      const angle = index / Math.max(paths.length, 1) * Math.PI * 2 - Math.PI / 2;
-      const x = 50 + Math.cos(angle) * 39;
-      const y = 50 + Math.sin(angle) * 38;
-      lines.createSvg("line", { attr: { x1: "50", y1: "50", x2: String(x), y2: String(y) } });
-      const node = preview.createEl("button", { text: (_b2 = (_a2 = path.split("/").pop()) == null ? void 0 : _a2.replace(/\.md$/i, "")) != null ? _b2 : path, cls: "cw-graph-node" });
-      node.style.setProperty("--cw-node-x", `${x}%`);
-      node.style.setProperty("--cw-node-y", `${y}%`);
-      host.registerDomEvent(node, "click", () => {
-        const file = plugin.index.find(path);
-        if (file) void plugin.app.workspace.getLeaf(false).openFile(file);
-      });
-    });
-    if (!paths.length) preview.createDiv({ text: t("\u5F53\u524D\u7B14\u8BB0\u6682\u65E0\u5DF2\u89E3\u6790\u5173\u7CFB"), cls: "cw-graph-empty" });
+  params: [],
+  async render(container) {
+    unavailable(container, t("Obsidian \u6682\u672A\u63D0\u4F9B\u5D4C\u5165\u539F\u751F\u56FE\u8C31\u7684\u516C\u5F00\u63A5\u53E3"));
   }
 };
 var templater = {
@@ -543,13 +493,25 @@ var wordsTrend = {
       container.createDiv({ text: t("\u6682\u65E0\u5185\u5BB9"), cls: "cw-empty" });
       return;
     }
-    const max = Math.max(...history.map((point) => point.words), 1);
-    const chart = container.createDiv({ cls: "cw-chart" });
-    for (const point of history.slice(-90)) {
+    const points = history.slice(-90);
+    const max = Math.max(...points.map((point) => point.words), 1);
+    const frame = container.createDiv({ cls: "cw-chart-frame" });
+    const yAxis = frame.createDiv({ cls: "cw-chart-y-axis" });
+    yAxis.createSpan({ text: max.toLocaleString() });
+    yAxis.createSpan({ text: Math.round(max / 2).toLocaleString() });
+    yAxis.createSpan({ text: "0" });
+    const plot = frame.createDiv({ cls: "cw-chart-plot" });
+    plot.createDiv({ text: t("\u53EF\u8BFB\u5B57\u6570"), cls: "cw-chart-metric" });
+    const chart = plot.createDiv({ cls: "cw-chart" });
+    for (const point of points) {
       const bar = chart.createDiv({ cls: `cw-chart__bar${point.estimated ? " is-estimated" : ""}` });
       bar.style.setProperty("--cw-bar-height", `${Math.max(2, point.words / max * 100)}%`);
       bar.ariaLabel = `${point.date}: ${point.words}`;
     }
+    const xAxis = plot.createDiv({ cls: "cw-chart-x-axis" });
+    xAxis.createSpan({ text: points[0].date.slice(5) });
+    xAxis.createSpan({ text: points[Math.floor(points.length / 2)].date.slice(5) });
+    xAxis.createSpan({ text: points[points.length - 1].date.slice(5) });
   }
 };
 var todayTasks = {
@@ -562,7 +524,7 @@ var todayTasks = {
     await plugin.renderTasks(container, host);
   }
 };
-var BUILTINS = [vaultStats, todayTasks, quickJump, commandButtons, health, wordsTrend, graph, templater, baseView, dataview];
+var BUILTINS = [vaultStats, todayTasks, quickJump, commandButtons, wordsTrend, graph, templater, baseView, dataview];
 function builtinDefinitions() {
   return BUILTINS;
 }
@@ -576,7 +538,6 @@ function componentName(definition) {
     "builtin/today-tasks": t("\u4ECA\u65E5\u4EFB\u52A1"),
     "builtin/quick-jump": t("\u5FEB\u901F\u8DF3\u8F6C"),
     "builtin/command-buttons": t("\u547D\u4EE4\u6309\u94AE"),
-    "builtin/note-health": t("\u7B14\u8BB0\u5065\u5EB7\u5EA6"),
     "builtin/trends": t("\u5B57\u6570\u4E0E\u8D8B\u52BF"),
     "builtin/graph": t("\u77E5\u8BC6\u56FE\u8C31"),
     "builtin/quick-create": t("\u5FEB\u901F\u65B0\u5EFA"),
@@ -642,6 +603,13 @@ function moveBlock(blocks, index, offset) {
   [next[index], next[target]] = [next[target], next[index]];
   return next;
 }
+function moveBlockTo(blocks, from, to) {
+  if (from < 0 || from >= blocks.length || to < 0 || to >= blocks.length || from === to) return [...blocks];
+  const next = [...blocks];
+  const [block] = next.splice(from, 1);
+  next.splice(to, 0, block);
+  return next;
+}
 function cycleSpan(span, direction) {
   const index = SPANS.indexOf(span);
   return SPANS[Math.max(0, Math.min(SPANS.length - 1, index + direction))];
@@ -675,50 +643,59 @@ var WorkspaceRenderer = class extends import_obsidian5.Component {
     const header = card.createDiv({ cls: "cw-block__header" });
     const title = header.createDiv({ cls: "cw-block__title" });
     if (definition) (0, import_obsidian5.setIcon)(title.createSpan({ cls: "cw-block__icon" }), definition.icon);
-    title.createSpan({ text: block.title || (definition ? componentName(definition) : t("\u672A\u77E5\u7EC4\u4EF6")) });
-    if (this.editing()) this.renderControls(header, card, block, index, (_a = definition == null ? void 0 : definition.params) != null ? _a : [], scope);
+    const titleText = title.createSpan({ text: block.title || (definition ? componentName(definition) : t("\u672A\u77E5\u7EC4\u4EF6")) });
     const body = card.createDiv({ cls: "cw-block__body" });
     body.createDiv({ text: t("\u52A0\u8F7D\u4E2D\u2026"), cls: "cw-loading" });
-    const render = async () => {
+    let child;
+    let previewGeneration = 0;
+    const renderPreview = async () => {
+      const generation = ++previewGeneration;
+      if (child) {
+        scope.removeChild(child);
+        child.unload();
+      }
       body.empty();
-      const child = new import_obsidian5.Component();
+      const renderTarget = body.createDiv({ cls: "cw-preview-render" });
+      child = new import_obsidian5.Component();
       scope.addChild(child);
       if (!definition) {
-        body.createDiv({ text: t("\u672A\u77E5\u7EC4\u4EF6"), cls: "cw-unavailable" });
+        renderTarget.createDiv({ text: t("\u672A\u77E5\u7EC4\u4EF6"), cls: "cw-unavailable" });
         return;
       }
       try {
-        await definition.render(body, block, child, this.plugin);
+        await definition.render(renderTarget, block, child, this.plugin);
       } catch (error) {
-        body.empty();
+        if (generation !== previewGeneration) return;
+        renderTarget.empty();
         const detail = error instanceof Error ? `${error.message}${error.stack ? `
 ${error.stack.split("\n").slice(1, 3).join("\n")}` : ""}` : String(error);
-        body.createEl("pre", { text: block.componentId.startsWith("script/") ? `${block.componentId.slice(7)}
+        renderTarget.createEl("pre", { text: block.componentId.startsWith("script/") ? `${block.componentId.slice(7)}
 ${detail}` : detail, cls: "cw-error" });
-        const retry = body.createEl("button", { text: t("\u91CD\u8BD5") });
-        retry.addEventListener("click", () => void render());
+        const retry = renderTarget.createEl("button", { text: t("\u91CD\u8BD5") });
+        scope.registerDomEvent(retry, "click", () => void renderPreview());
       }
     };
+    if (this.editing()) this.renderControls(header, card, block, index, (_a = definition == null ? void 0 : definition.params) != null ? _a : [], scope, renderPreview, titleText, definition ? componentName(definition) : t("\u672A\u77E5\u7EC4\u4EF6"));
     const ViewIntersectionObserver = (_b = card.ownerDocument.defaultView) == null ? void 0 : _b.IntersectionObserver;
     if (!ViewIntersectionObserver) {
-      void render();
+      void renderPreview();
       return;
     }
     const observer = new ViewIntersectionObserver((entries) => {
       if (entries.some((entry) => entry.isIntersecting)) {
         observer.disconnect();
-        void render();
+        void renderPreview();
       }
     }, { rootMargin: "160px" });
     observer.observe(card);
     scope.register(() => observer.disconnect());
   }
-  renderControls(header, card, block, index, params, scope) {
+  renderControls(header, card, block, index, params, scope, refreshPreview, titleText, defaultTitle) {
     const controls = header.createDiv({ cls: "cw-block__controls" });
     const button = (icon, label, action) => {
       const element = controls.createEl("button", { attr: { "aria-label": label, title: label } });
       (0, import_obsidian5.setIcon)(element, icon);
-      element.addEventListener("click", action);
+      scope.registerDomEvent(element, "click", action);
       return element;
     };
     button("arrow-up", t("\u4E0A\u79FB"), () => void this.move(index, -1));
@@ -729,8 +706,32 @@ ${detail}` : detail, cls: "cw-error" });
       const option = widths.createEl("button", { text: label, cls: block.span === span ? "is-active" : "" });
       scope.registerDomEvent(option, "click", () => void this.setSpan(block, span));
     }
-    button("settings-2", t("\u914D\u7F6E"), () => this.toggleConfig(card, block, params, scope));
+    button("settings-2", t("\u914D\u7F6E"), () => this.toggleConfig(card, block, params, scope, refreshPreview, titleText, defaultTitle));
     button("trash-2", t("\u5220\u9664"), () => void this.remove(index));
+    header.draggable = true;
+    header.addClass("cw-drag-handle");
+    scope.registerDomEvent(header, "dragstart", (event) => {
+      var _a;
+      this.draggedIndex = index;
+      card.addClass("is-dragging");
+      (_a = event.dataTransfer) == null ? void 0 : _a.setData("text/plain", block.id);
+      if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+    });
+    scope.registerDomEvent(header, "dragend", () => {
+      this.draggedIndex = void 0;
+      card.removeClass("is-dragging");
+    });
+    scope.registerDomEvent(card, "dragover", (event) => {
+      if (this.draggedIndex === void 0) return;
+      event.preventDefault();
+      card.addClass("is-drag-over");
+    });
+    scope.registerDomEvent(card, "dragleave", () => card.removeClass("is-drag-over"));
+    scope.registerDomEvent(card, "drop", (event) => {
+      event.preventDefault();
+      card.removeClass("is-drag-over");
+      if (this.draggedIndex !== void 0) void this.moveTo(this.draggedIndex, index);
+    });
     scope.registerDomEvent(card, "keydown", (event) => {
       if (!event.altKey) return;
       if (event.key === "ArrowUp") {
@@ -752,7 +753,7 @@ ${detail}` : detail, cls: "cw-error" });
     });
     card.tabIndex = 0;
   }
-  toggleConfig(card, block, params, scope) {
+  toggleConfig(card, block, params, scope, refreshPreview, titleText, defaultTitle) {
     const existing = card.querySelector(".cw-block__config");
     if (existing) {
       existing.remove();
@@ -763,24 +764,28 @@ ${detail}` : detail, cls: "cw-error" });
       var _a;
       return text.setValue((_a = block.title) != null ? _a : "").onChange(async (value) => {
         block.title = value || void 0;
+        titleText.setText(block.title || defaultTitle);
         await this.plugin.persist();
       });
     });
     if (block.componentId === "builtin/vault-stats") {
-      this.renderStatsEditor(config, block);
+      this.renderStatsEditor(config, block, refreshPreview);
       return;
     }
     if (block.componentId === "builtin/command-buttons") {
-      this.renderCommandEditor(config, block);
+      this.renderCommandEditor(config, block, refreshPreview);
       return;
     }
     if (block.componentId === "builtin/dataview") {
-      this.renderDataviewEditor(config, block, scope);
+      this.renderDataviewEditor(config, block, scope, refreshPreview);
       return;
     }
-    for (const param of params) addParamSetting(config, param, block, async () => this.persist());
+    for (const param of params) addParamSetting(config, param, block, async () => {
+      await this.plugin.persist();
+      await refreshPreview();
+    });
   }
-  renderStatsEditor(container, block) {
+  renderStatsEditor(container, block, refreshPreview) {
     const selected = new Set(selectedStats(block.params.items));
     const group = container.createDiv({ cls: "cw-stats-editor" });
     group.createEl("h4", { text: t("\u7EDF\u8BA1\u9879") });
@@ -790,10 +795,11 @@ ${detail}` : detail, cls: "cw-error" });
         else selected.delete(key);
         block.params.items = [...selected];
         await this.plugin.persist();
+        await refreshPreview();
       }));
     }
   }
-  renderCommandEditor(container, block) {
+  renderCommandEditor(container, block, refreshPreview) {
     const values = Array.isArray(block.params.buttons) ? block.params.buttons.filter((value) => typeof value === "object" && value !== null && !Array.isArray(value)) : [];
     const draw = () => {
       var _a;
@@ -804,6 +810,7 @@ ${detail}` : detail, cls: "cw-error" });
         new import_obsidian5.Setting(row).setName(t("\u663E\u793A\u540D")).addText((text) => text.setValue(typeof value.label === "string" ? value.label : "").onChange(async (next) => {
           value.label = next;
           await this.plugin.persist();
+          await refreshPreview();
         }));
         new import_obsidian5.Setting(row).setName(t("\u547D\u4EE4")).addDropdown((dropdown) => {
           dropdown.addOption("", t("\u8BF7\u9009\u62E9\u547D\u4EE4"));
@@ -811,16 +818,19 @@ ${detail}` : detail, cls: "cw-error" });
           dropdown.setValue(typeof value.command === "string" ? value.command : "").onChange(async (next) => {
             value.command = next;
             await this.plugin.persist();
+            await refreshPreview();
           });
         });
         new import_obsidian5.Setting(row).setName(t("\u8981\u786E\u8BA4")).addToggle((toggle) => toggle.setValue(value.confirm === true).onChange(async (next) => {
           value.confirm = next;
           await this.plugin.persist();
+          await refreshPreview();
         }));
         new import_obsidian5.Setting(row).addButton((button) => button.setButtonText(t("\u5220\u9664")).onClick(async () => {
           values.splice(index, 1);
           block.params.buttons = values;
           await this.plugin.persist();
+          await refreshPreview();
           draw();
         }));
       });
@@ -828,12 +838,13 @@ ${detail}` : detail, cls: "cw-error" });
         values.push({ label: "", command: "", confirm: false });
         block.params.buttons = values;
         await this.plugin.persist();
+        await refreshPreview();
         draw();
       }));
     };
     draw();
   }
-  renderDataviewEditor(container, block, scope) {
+  renderDataviewEditor(container, block, scope, refreshPreview) {
     let draft = typeof block.params.code === "string" ? block.params.code : "";
     const area = container.createEl("textarea", { cls: "cw-code-input", attr: { rows: "8", "aria-label": t("\u4EE3\u7801") } });
     area.value = draft;
@@ -855,6 +866,7 @@ ${detail}` : detail, cls: "cw-error" });
         await api.executeJs(draft, preview, child, (_b = (_a = this.plugin.app.workspace.getActiveFile()) == null ? void 0 : _a.path) != null ? _b : "");
         block.params.code = draft;
         await this.plugin.persist();
+        await refreshPreview();
         preview.createDiv({ text: t("\u8BD5\u8FD0\u884C\u6210\u529F\uFF0C\u5DF2\u4FDD\u5B58\u3002"), cls: "cw-success" });
       } catch (error) {
         preview.createEl("pre", { text: error instanceof Error ? error.message : String(error), cls: "cw-error" });
@@ -873,6 +885,11 @@ ${detail}` : detail, cls: "cw-error" });
   }
   async move(index, offset) {
     this.plugin.data.workspace.blocks = moveBlock(this.plugin.data.workspace.blocks, index, offset);
+    await this.persist();
+  }
+  async moveTo(from, to) {
+    this.plugin.data.workspace.blocks = moveBlockTo(this.plugin.data.workspace.blocks, from, to);
+    this.draggedIndex = void 0;
     await this.persist();
   }
   async changeSpan(block, direction) {
@@ -912,6 +929,7 @@ var CustomWorkspaceView = class extends import_obsidian6.ItemView {
   }
   async onOpen() {
     this.contentEl.addClass("cw-root", `cw-density-${this.plugin.config.density}`);
+    this.addAction("refresh-cw", t("\u5237\u65B0\u5DE5\u4F5C\u53F0"), () => void this.refreshWorkspace());
     this.modeAction = this.addAction("pencil", t("\u7F16\u8F91\u6A21\u5F0F"), () => this.toggleEditing());
     this.modeAction.addClass("cw-mode-toggle");
     this.renderer = new WorkspaceRenderer(this.plugin, this.contentEl, () => this.editing);
@@ -926,6 +944,11 @@ var CustomWorkspaceView = class extends import_obsidian6.ItemView {
   async refresh() {
     var _a;
     await ((_a = this.renderer) == null ? void 0 : _a.render());
+  }
+  async refreshWorkspace() {
+    this.plugin.index.invalidate();
+    await this.plugin.reloadScripts();
+    await this.refresh();
   }
   toggleEditing() {
     this.editing = !this.editing;
@@ -957,7 +980,7 @@ var DEFAULT_SETTINGS = {
   allowScripts: false
 };
 var DEFAULT_DATA = {
-  version: 1,
+  version: 2,
   settings: DEFAULT_SETTINGS,
   workspace: { blocks: [
     { id: "default-stats", componentId: "builtin/vault-stats", span: 12, params: {} },
@@ -989,15 +1012,19 @@ function mergeSettings(value) {
 }
 function migrateData(value) {
   if (!isRecord(value)) return structuredClone(DEFAULT_DATA);
-  const workspace = isRecord(value.workspace) && Array.isArray(value.workspace.blocks) ? { blocks: value.workspace.blocks.filter(isBlock) } : structuredClone(DEFAULT_DATA.workspace);
+  const workspace = isRecord(value.workspace) && Array.isArray(value.workspace.blocks) ? { blocks: value.workspace.blocks.filter(isBlock).map(migrateBlock) } : structuredClone(DEFAULT_DATA.workspace);
   const history = Array.isArray(value.history) ? value.history.filter(isSnapshot) : [];
   return {
-    version: 1,
+    version: 2,
     settings: mergeSettings(value.settings),
     workspace,
     history,
     historyInitialized: typeof value.historyInitialized === "boolean" ? value.historyInitialized : history.length > 0
   };
+}
+function migrateBlock(block) {
+  if (block.componentId !== "builtin/note-health") return block;
+  return { ...block, componentId: "builtin/vault-stats", params: { ...block.params, items: ["orphans", "empty", "short"] } };
 }
 function isBlock(value) {
   return isRecord(value) && typeof value.id === "string" && typeof value.componentId === "string" && [3, 4, 6, 12].includes(Number(value.span)) && isRecord(value.params);
