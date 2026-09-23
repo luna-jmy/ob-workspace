@@ -2,11 +2,12 @@ import { Component, Setting, setIcon } from "obsidian";
 import type CustomWorkspacePlugin from "../main";
 import type { Block, BlockSpan } from "../types";
 import { addParamSetting, componentName, selectedStats, STAT_LABELS, type StatKey } from "../components/registry";
-import { moveBlock } from "../workspace/layout";
+import { moveBlock, moveBlockTo } from "../workspace/layout";
 import { t } from "../i18n";
 
 export class WorkspaceRenderer extends Component {
   private scope?: Component;
+  private draggedIndex?: number;
   constructor(private readonly plugin: CustomWorkspacePlugin, private readonly container: HTMLElement, private readonly editing: () => boolean) { super(); }
   async render(): Promise<void> {
     if (this.scope) { this.removeChild(this.scope); this.scope.unload(); }
@@ -40,7 +41,10 @@ export class WorkspaceRenderer extends Component {
         const retry = renderTarget.createEl("button", { text: t("重试") }); scope.registerDomEvent(retry, "click", () => void renderPreview());
       }
     };
-    if (this.editing()) this.renderControls(header, card, block, index, definition?.params ?? [], scope, renderPreview, titleText, definition ? componentName(definition) : t("未知组件"));
+    if (this.editing()) {
+      this.renderControls(header, card, block, index, definition?.params ?? [], scope, renderPreview, titleText, definition ? componentName(definition) : t("未知组件"));
+      this.registerDrag(card, title, block, index, scope);
+    }
     const ViewIntersectionObserver = card.ownerDocument.defaultView?.IntersectionObserver;
     if (!ViewIntersectionObserver) { void renderPreview(); return; }
     const observer = new ViewIntersectionObserver((entries) => { if (entries.some((entry) => entry.isIntersecting)) { observer.disconnect(); void renderPreview(); } }, { rootMargin: "160px" });
@@ -59,6 +63,35 @@ export class WorkspaceRenderer extends Component {
       scope.registerDomEvent(option, "click", () => void this.setSpan(block, span));
     }
     button("settings-2", t("配置"), () => this.toggleConfig(card, block, params, scope, refreshPreview, titleText, defaultTitle)); button("trash-2", t("删除"), () => void this.remove(index));
+  }
+  private registerDrag(card: HTMLElement, handle: HTMLElement, block: Block, index: number, scope: Component): void {
+    const clearDragState = (): void => {
+      this.draggedIndex = undefined;
+      card.removeClass("is-dragging");
+      for (const element of Array.from(this.container.querySelectorAll(".cw-block.is-drag-over"))) element.classList.remove("is-drag-over");
+    };
+    handle.draggable = true;
+    handle.addClass("cw-drag-handle");
+    scope.registerDomEvent(handle, "dragstart", (event) => {
+      this.draggedIndex = index;
+      card.addClass("is-dragging");
+      event.dataTransfer?.setData("text/plain", block.id);
+      if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+    });
+    scope.registerDomEvent(handle, "dragend", clearDragState);
+    scope.registerDomEvent(card, "dragover", (event) => {
+      if (this.draggedIndex === undefined) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+      card.addClass("is-drag-over");
+    });
+    scope.registerDomEvent(card, "dragleave", () => card.removeClass("is-drag-over"));
+    scope.registerDomEvent(card, "drop", (event) => {
+      event.preventDefault();
+      const from = this.draggedIndex;
+      clearDragState();
+      if (from !== undefined) void this.moveTo(from, index);
+    });
   }
   private toggleConfig(card: HTMLElement, block: Block, params: import("../params/parser").ParamDefinition[], scope: Component, refreshPreview: () => Promise<void>, titleText: HTMLElement, defaultTitle: string): void {
     const existing = card.querySelector(".cw-block__config"); if (existing) { void this.render(); return; }
@@ -140,6 +173,7 @@ export class WorkspaceRenderer extends Component {
     }
   }
   private async move(index: number, offset: -1 | 1): Promise<void> { this.plugin.data.workspace.blocks = moveBlock(this.plugin.data.workspace.blocks, index, offset); await this.persist(); }
+  private async moveTo(from: number, to: number): Promise<void> { this.plugin.data.workspace.blocks = moveBlockTo(this.plugin.data.workspace.blocks, from, to); await this.persist(); }
   private async setSpan(block: Block, span: BlockSpan): Promise<void> { block.span = span; await this.persist(); }
   private async remove(index: number): Promise<void> { this.plugin.data.workspace.blocks.splice(index, 1); await this.persist(); }
   private async persist(): Promise<void> { await this.plugin.persist(); await this.render(); }

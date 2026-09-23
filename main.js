@@ -921,6 +921,13 @@ function moveBlock(blocks, index, offset) {
   [next[index], next[target]] = [next[target], next[index]];
   return next;
 }
+function moveBlockTo(blocks, from, to) {
+  if (from < 0 || from >= blocks.length || to < 0 || to >= blocks.length || from === to) return [...blocks];
+  const next = [...blocks];
+  const [block] = next.splice(from, 1);
+  next.splice(to, 0, block);
+  return next;
+}
 
 // src/render/workspace-renderer.ts
 var WorkspaceRenderer = class extends import_obsidian5.Component {
@@ -982,7 +989,10 @@ ${detail}` : detail, cls: "cw-error" });
         scope.registerDomEvent(retry, "click", () => void renderPreview());
       }
     };
-    if (this.editing()) this.renderControls(header, card, block, index, (_a = definition == null ? void 0 : definition.params) != null ? _a : [], scope, renderPreview, titleText, definition ? componentName(definition) : t("\u672A\u77E5\u7EC4\u4EF6"));
+    if (this.editing()) {
+      this.renderControls(header, card, block, index, (_a = definition == null ? void 0 : definition.params) != null ? _a : [], scope, renderPreview, titleText, definition ? componentName(definition) : t("\u672A\u77E5\u7EC4\u4EF6"));
+      this.registerDrag(card, title, block, index, scope);
+    }
     const ViewIntersectionObserver = (_b = card.ownerDocument.defaultView) == null ? void 0 : _b.IntersectionObserver;
     if (!ViewIntersectionObserver) {
       void renderPreview();
@@ -1015,6 +1025,36 @@ ${detail}` : detail, cls: "cw-error" });
     }
     button("settings-2", t("\u914D\u7F6E"), () => this.toggleConfig(card, block, params, scope, refreshPreview, titleText, defaultTitle));
     button("trash-2", t("\u5220\u9664"), () => void this.remove(index));
+  }
+  registerDrag(card, handle, block, index, scope) {
+    const clearDragState = () => {
+      this.draggedIndex = void 0;
+      card.removeClass("is-dragging");
+      for (const element of Array.from(this.container.querySelectorAll(".cw-block.is-drag-over"))) element.classList.remove("is-drag-over");
+    };
+    handle.draggable = true;
+    handle.addClass("cw-drag-handle");
+    scope.registerDomEvent(handle, "dragstart", (event) => {
+      var _a;
+      this.draggedIndex = index;
+      card.addClass("is-dragging");
+      (_a = event.dataTransfer) == null ? void 0 : _a.setData("text/plain", block.id);
+      if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+    });
+    scope.registerDomEvent(handle, "dragend", clearDragState);
+    scope.registerDomEvent(card, "dragover", (event) => {
+      if (this.draggedIndex === void 0) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+      card.addClass("is-drag-over");
+    });
+    scope.registerDomEvent(card, "dragleave", () => card.removeClass("is-drag-over"));
+    scope.registerDomEvent(card, "drop", (event) => {
+      event.preventDefault();
+      const from = this.draggedIndex;
+      clearDragState();
+      if (from !== void 0) void this.moveTo(from, index);
+    });
   }
   toggleConfig(card, block, params, scope, refreshPreview, titleText, defaultTitle) {
     const existing = card.querySelector(".cw-block__config");
@@ -1187,6 +1227,10 @@ ${detail}` : detail, cls: "cw-error" });
   }
   async move(index, offset) {
     this.plugin.data.workspace.blocks = moveBlock(this.plugin.data.workspace.blocks, index, offset);
+    await this.persist();
+  }
+  async moveTo(from, to) {
+    this.plugin.data.workspace.blocks = moveBlockTo(this.plugin.data.workspace.blocks, from, to);
     await this.persist();
   }
   async setSpan(block, span) {

@@ -111,7 +111,12 @@ describe("layout", () => {
     { id: "a", componentId: "x", span: 4, params: {} }, { id: "b", componentId: "x", span: 6, params: {} }
   ];
   it("moves within bounds", () => { expect(moveBlock(blocks, 0, 1).map((item) => item.id)).toEqual(["b", "a"]); expect(moveBlock(blocks, 0, -1)).toEqual(blocks); });
-  it("moves directly for drag and drop", () => { expect(moveBlockTo(blocks, 0, 1).map((item) => item.id)).toEqual(["b", "a"]); expect(moveBlockTo(blocks, -1, 1)).toEqual(blocks); });
+  it("moves directly for drag and drop", () => {
+    const three = [...blocks, { id: "c", componentId: "x", span: 12, params: {} } satisfies Block];
+    expect(moveBlockTo(three, 0, 2).map((item) => item.id)).toEqual(["b", "c", "a"]);
+    expect(moveBlockTo(three, 2, 0).map((item) => item.id)).toEqual(["c", "a", "b"]);
+    expect(moveBlockTo(blocks, -1, 1)).toEqual(blocks);
+  });
   it("cycles all four width options within bounds", () => { expect(cycleSpan(3, 1)).toBe(4); expect(cycleSpan(4, 1)).toBe(6); expect(cycleSpan(12, 1)).toBe(12); });
 });
 
