@@ -1,6 +1,6 @@
 export interface HeatmapDay { date: string; notes: number; words: number }
 export interface FolderMetric { name: string; notes: number; words: number; paths: string[] }
-export interface AnalyticsNote { path: string; words: number; ctime: number; mtime: number }
+export interface AnalyticsNote { path: string; words: number; ctime: number; mtime: number; frontmatterCreated?: unknown }
 
 function localDateKey(timestamp: number): string {
   const date = new Date(timestamp);
@@ -10,14 +10,32 @@ function localDateKey(timestamp: number): string {
   return `${year}-${month}-${day}`;
 }
 
+export function resolveCreatedDate(value: unknown, fallbackTimestamp: number): string {
+  const fallback = localDateKey(fallbackTimestamp);
+  if (typeof value !== "string" && typeof value !== "number") return fallback;
+  const match = String(value).trim().match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:\D|$)/);
+  if (!match) return fallback;
+  const year = Number(match[1]); const month = Number(match[2]); const day = Number(match[3]);
+  const parsed = new Date(year, month - 1, day);
+  if (parsed.getFullYear() !== year || parsed.getMonth() !== month - 1 || parsed.getDate() !== day) return fallback;
+  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
 export function aggregateHeatmap(notes: AnalyticsNote[], now: number, days = 365): HeatmapDay[] {
   const start = new Date(now); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() - Math.max(0, days - 1));
   const end = new Date(now); end.setHours(23, 59, 59, 999);
+  const startKey = localDateKey(start.getTime()); const endKey = localDateKey(end.getTime());
   const values = new Map<string, HeatmapDay>();
   for (const note of notes) {
-    if (note.ctime < start.getTime() || note.ctime > end.getTime()) continue;
-    const date = localDateKey(note.ctime); const day = values.get(date) ?? { date, notes: 0, words: 0 };
-    day.notes += 1; day.words += note.words; values.set(date, day);
+    const createdDate = resolveCreatedDate(note.frontmatterCreated, note.ctime);
+    if (createdDate >= startKey && createdDate <= endKey) {
+      const createdDay = values.get(createdDate) ?? { date: createdDate, notes: 0, words: 0 };
+      createdDay.notes += 1; values.set(createdDate, createdDay);
+    }
+    if (note.mtime >= start.getTime() && note.mtime <= end.getTime()) {
+      const modifiedDate = localDateKey(note.mtime); const modifiedDay = values.get(modifiedDate) ?? { date: modifiedDate, notes: 0, words: 0 };
+      modifiedDay.words += note.words; values.set(modifiedDate, modifiedDay);
+    }
   }
   return [...values.values()].sort((a, b) => a.date.localeCompare(b.date));
 }

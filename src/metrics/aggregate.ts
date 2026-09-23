@@ -1,6 +1,6 @@
 import { aggregateHeatmap, aggregateTopFolders, type FolderMetric, type HeatmapDay } from "./analytics";
 
-export interface NoteMetricInput { path: string; words: number; ctime: number; mtime: number; outgoing: number; incoming: number }
+export interface NoteMetricInput { path: string; words: number; ctime: number; mtime: number; frontmatterCreated?: unknown; outgoing: number; incoming: number }
 export interface VaultMetrics {
   notes: number; attachments: number; folders: number; recent: number; words: number; links: number;
   notePaths: string[]; attachmentPaths: string[]; folderPaths: string[]; recentPaths: string[]; linkedPaths: string[];

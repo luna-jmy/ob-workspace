@@ -118,21 +118,29 @@ const templater: ComponentDefinition = {
 };
 
 const dataview: ComponentDefinition = {
-  id: "builtin/dataview", name: "Dataview 查询", icon: "table", description: "", params: [{ key: "code", type: "text", defaultValue: "" }],
+  id: "builtin/dataview", name: "Dataview 查询", icon: "table", description: "", params: [
+    { key: "code", type: "text", defaultValue: "" }, { key: "source", type: "note", defaultValue: "" }
+  ],
   async render(container, block, host, plugin) {
     const api = plugin.bridge.dataview(); if (!api) { unavailable(container, t("需要 Dataview 插件")); return; }
-    await api.executeJs(paramString(block.params.code), container, host, plugin.app.workspace.getActiveFile()?.path ?? "");
+    const code = paramString(block.params.code);
+    if (!code.trim()) { unavailable(container, t("请在编辑模式配置并试运行查询")); return; }
+    const configuredSource = paramString(block.params.source);
+    const source = configuredSource && plugin.index.find(configuredSource) ? configuredSource : plugin.app.workspace.getActiveFile()?.path ?? "";
+    await api.executeJs(code, container, host, source);
   }
 };
 
 const baseView: ComponentDefinition = {
   id: "builtin/base", name: "Base 视图", icon: "layout-list", description: "", params: [{ key: "file", type: "note", defaultValue: "" }],
   async render(container, block, host, plugin) {
-    const path = paramString(block.params.file);
-    if (!path) { unavailable(container, t("组件不可用")); return; }
-    await MarkdownRenderer.render(plugin.app, `![[${path}]]`, container, "", host);
+    const path = paramString(block.params.file); const file = plugin.index.find(path);
+    if (!path) { unavailable(container, t("请在编辑模式选择 Base 文件")); return; }
+    if (!file || file.extension !== "base") { unavailable(container, t("找不到所选 Base 文件")); return; }
+    const preview = container.createDiv({ cls: "cw-base-preview" });
+    await MarkdownRenderer.render(plugin.app, `![[${path}]]`, preview, plugin.app.workspace.getActiveFile()?.path ?? "", host);
     const open = container.createEl("button", { text: t("打开"), cls: "cw-link-button" });
-    open.addEventListener("click", () => { const file = plugin.index.find(path); if (file) void plugin.app.workspace.getLeaf(false).openFile(file); });
+    host.registerDomEvent(open, "click", () => void plugin.app.workspace.getLeaf(false).openFile(file));
   }
 };
 
@@ -162,9 +170,9 @@ const activityHeatmap: ComponentDefinition = {
     const maximum = Math.max(0, ...values.values()); const total = [...values.values()].reduce((sum, value) => sum + value, 0);
     const summary = container.createDiv({ cls: "cw-analytics-summary" });
     summary.createSpan({ text: t("过去 12 个月") }); summary.createSpan({ text: `${total.toLocaleString()} ${useNotes ? t("篇笔记") : t("字")}` });
-    const explanation = useNotes ? t("按笔记创建日期统计新增笔记") : t("按笔记创建日期归组当前字数");
+    const explanation = useNotes ? t("新增笔记优先使用 created，缺失时使用文件创建时间") : t("按系统修改日期归组当前字数");
     const unit = useNotes ? t("篇") : t("字");
-    const grid = container.createDiv({ cls: "cw-heatmap", attr: { role: "img", "aria-label": explanation } });
+    const grid = container.createDiv({ cls: `cw-heatmap${block.span === 3 ? " cw-heatmap--square" : ""}`, attr: { role: "img", "aria-label": explanation } });
     const end = moment().startOf("day"); const start = end.clone().subtract(364, "days");
     for (let index = 0; index < start.day(); index += 1) grid.createSpan({ cls: "cw-heatmap__blank", attr: { "aria-hidden": "true" } });
     for (let index = 0; index < 365; index += 1) {

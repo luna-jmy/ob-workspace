@@ -2,12 +2,11 @@ import { Component, Setting, setIcon } from "obsidian";
 import type CustomWorkspacePlugin from "../main";
 import type { Block, BlockSpan } from "../types";
 import { addParamSetting, componentName, selectedStats, STAT_LABELS, type StatKey } from "../components/registry";
-import { cycleSpan, moveBlock, moveBlockTo } from "../workspace/layout";
+import { moveBlock } from "../workspace/layout";
 import { t } from "../i18n";
 
 export class WorkspaceRenderer extends Component {
   private scope?: Component;
-  private draggedIndex?: number;
   constructor(private readonly plugin: CustomWorkspacePlugin, private readonly container: HTMLElement, private readonly editing: () => boolean) { super(); }
   async render(): Promise<void> {
     if (this.scope) { this.removeChild(this.scope); this.scope.unload(); }
@@ -60,27 +59,14 @@ export class WorkspaceRenderer extends Component {
       scope.registerDomEvent(option, "click", () => void this.setSpan(block, span));
     }
     button("settings-2", t("配置"), () => this.toggleConfig(card, block, params, scope, refreshPreview, titleText, defaultTitle)); button("trash-2", t("删除"), () => void this.remove(index));
-    header.draggable = true; header.addClass("cw-drag-handle");
-    scope.registerDomEvent(header, "dragstart", (event) => { this.draggedIndex = index; card.addClass("is-dragging"); event.dataTransfer?.setData("text/plain", block.id); if (event.dataTransfer) event.dataTransfer.effectAllowed = "move"; });
-    scope.registerDomEvent(header, "dragend", () => { this.draggedIndex = undefined; card.removeClass("is-dragging"); });
-    scope.registerDomEvent(card, "dragover", (event) => { if (this.draggedIndex === undefined) return; event.preventDefault(); card.addClass("is-drag-over"); });
-    scope.registerDomEvent(card, "dragleave", () => card.removeClass("is-drag-over"));
-    scope.registerDomEvent(card, "drop", (event) => { event.preventDefault(); card.removeClass("is-drag-over"); if (this.draggedIndex !== undefined) void this.moveTo(this.draggedIndex, index); });
-    scope.registerDomEvent(card, "keydown", (event) => {
-      if (!event.altKey) return;
-      if (event.key === "ArrowUp") { event.preventDefault(); void this.move(index, -1); }
-      if (event.key === "ArrowDown") { event.preventDefault(); void this.move(index, 1); }
-      if (event.key === "ArrowLeft") { event.preventDefault(); void this.changeSpan(block, -1); }
-      if (event.key === "ArrowRight") { event.preventDefault(); void this.changeSpan(block, 1); }
-    });
-    card.tabIndex = 0;
   }
   private toggleConfig(card: HTMLElement, block: Block, params: import("../params/parser").ParamDefinition[], scope: Component, refreshPreview: () => Promise<void>, titleText: HTMLElement, defaultTitle: string): void {
-    const existing = card.querySelector(".cw-block__config"); if (existing) { existing.remove(); return; }
+    const existing = card.querySelector(".cw-block__config"); if (existing) { void this.render(); return; }
     const config = card.createDiv({ cls: "cw-block__config" });
     new Setting(config).setName(t("标题")).addText((text) => text.setValue(block.title ?? "").onChange(async (value) => { block.title = value || undefined; titleText.setText(block.title || defaultTitle); await this.plugin.persist(); }));
     if (block.componentId === "builtin/vault-stats") { this.renderStatsEditor(config, block, refreshPreview); return; }
     if (block.componentId === "builtin/command-buttons") { this.renderCommandEditor(config, block, refreshPreview); return; }
+    if (block.componentId === "builtin/base") { this.renderBaseEditor(config, block, refreshPreview); return; }
     if (block.componentId === "builtin/dataview") { this.renderDataviewEditor(config, block, scope, refreshPreview); return; }
     for (const param of params) addParamSetting(config, param, block, async () => { await this.plugin.persist(); await refreshPreview(); });
   }
@@ -113,16 +99,35 @@ export class WorkspaceRenderer extends Component {
     };
     draw();
   }
+  private renderBaseEditor(container: HTMLElement, block: Block, refreshPreview: () => Promise<void>): void {
+    const files = this.plugin.app.vault.getFiles().filter((file) => file.extension === "base").sort((a, b) => a.path.localeCompare(b.path));
+    if (!files.length) { container.createDiv({ text: t("仓库中没有 .base 文件"), cls: "cw-unavailable" }); return; }
+    new Setting(container).setName(t("Base 文件")).addDropdown((dropdown) => {
+      dropdown.addOption("", t("请选择 Base 文件"));
+      for (const file of files) dropdown.addOption(file.path, file.path);
+      dropdown.setValue(typeof block.params.file === "string" ? block.params.file : "").onChange(async (value) => {
+        block.params.file = value; await this.plugin.persist(); await refreshPreview();
+      });
+    });
+  }
   private renderDataviewEditor(container: HTMLElement, block: Block, scope: Component, refreshPreview: () => Promise<void>): void {
     let draft = typeof block.params.code === "string" ? block.params.code : "";
+    let draftSource = typeof block.params.source === "string" ? block.params.source : "";
+    new Setting(container).setName(t("查询上下文笔记")).setDesc(t("留空时使用当前活动笔记")).addText((text) => text
+      .setValue(draftSource).setPlaceholder(t("笔记路径（可选）")).onChange((value) => { draftSource = value.trim(); }));
     const area = container.createEl("textarea", { cls: "cw-code-input", attr: { rows: "8", "aria-label": t("代码") } }); area.value = draft;
     scope.registerDomEvent(area, "input", () => { draft = area.value; });
     const preview = container.createDiv({ cls: "cw-dataview-preview" });
+    let testChild: Component | undefined;
     new Setting(container).addButton((button) => button.setButtonText(t("试运行并保存")).setCta().onClick(async () => {
       preview.empty(); const api = this.plugin.bridge.dataview();
       if (!api) { preview.setText(t("需要 Dataview 插件")); return; }
-      const child = new Component(); scope.addChild(child);
-      try { await api.executeJs(draft, preview, child, this.plugin.app.workspace.getActiveFile()?.path ?? ""); block.params.code = draft; await this.plugin.persist(); await refreshPreview(); preview.createDiv({ text: t("试运行成功，已保存。"), cls: "cw-success" }); }
+      if (!draft.trim()) { preview.setText(t("请输入 DataviewJS 查询代码")); return; }
+      if (draftSource && !this.plugin.index.find(draftSource)) { preview.setText(t("找不到查询上下文笔记")); return; }
+      if (testChild) { scope.removeChild(testChild); testChild.unload(); }
+      testChild = new Component(); scope.addChild(testChild);
+      const source = draftSource || this.plugin.app.workspace.getActiveFile()?.path || "";
+      try { await api.executeJs(draft, preview, testChild, source); block.params.code = draft; block.params.source = draftSource; await this.plugin.persist(); await refreshPreview(); preview.createDiv({ text: t("试运行成功，已保存。"), cls: "cw-success" }); }
       catch (error) { preview.createEl("pre", { text: error instanceof Error ? error.message : String(error), cls: "cw-error" }); }
     }));
   }
@@ -135,8 +140,6 @@ export class WorkspaceRenderer extends Component {
     }
   }
   private async move(index: number, offset: -1 | 1): Promise<void> { this.plugin.data.workspace.blocks = moveBlock(this.plugin.data.workspace.blocks, index, offset); await this.persist(); }
-  private async moveTo(from: number, to: number): Promise<void> { this.plugin.data.workspace.blocks = moveBlockTo(this.plugin.data.workspace.blocks, from, to); this.draggedIndex = undefined; await this.persist(); }
-  private async changeSpan(block: Block, direction: -1 | 1): Promise<void> { block.span = cycleSpan(block.span, direction); await this.persist(); }
   private async setSpan(block: Block, span: BlockSpan): Promise<void> { block.span = span; await this.persist(); }
   private async remove(index: number): Promise<void> { this.plugin.data.workspace.blocks.splice(index, 1); await this.persist(); }
   private async persist(): Promise<void> { await this.plugin.persist(); await this.render(); }

@@ -6,7 +6,7 @@ import { parseScriptMetadata, renderFilenamePattern, withParamDefaults } from ".
 import { cycleSpan, moveBlock, moveBlockTo } from "../src/workspace/layout";
 import { estimateHistory, upsertSnapshot } from "../src/history/history";
 import { DEFAULT_DATA, mergeSettings, migrateData, type Block } from "../src/types";
-import { activityLevel, aggregateHeatmap, aggregateTopFolders, areaPath, linePathRange } from "../src/metrics/analytics";
+import { activityLevel, aggregateHeatmap, aggregateTopFolders, areaPath, linePathRange, resolveCreatedDate } from "../src/metrics/analytics";
 import { svgClasses } from "../src/ui/classes";
 import { filterNotePaths, matchesNoteFilter } from "../src/metrics/note-filter";
 
@@ -31,10 +31,20 @@ describe("metric aggregation", () => {
 });
 
 describe("analytics", () => {
-  it("groups note counts and current words by creation date", () => {
+  it("prefers frontmatter creation dates and groups words by system modification time", () => {
     const now = new Date(2026, 8, 23, 12).getTime(); const yesterday = new Date(2026, 8, 22, 8).getTime();
-    expect(aggregateHeatmap([{ path: "a.md", words: 10, ctime: yesterday, mtime: now }, { path: "b.md", words: 5, ctime: yesterday, mtime: now }], now)).toEqual([{ date: "2026-09-22", notes: 2, words: 15 }]);
+    expect(aggregateHeatmap([
+      { path: "a.md", words: 10, ctime: now, mtime: now, frontmatterCreated: "2026-09-22 09:30" },
+      { path: "b.md", words: 5, ctime: yesterday, mtime: now }
+    ], now)).toEqual([{ date: "2026-09-22", notes: 2, words: 0 }, { date: "2026-09-23", notes: 0, words: 15 }]);
     expect(activityLevel(2, 4)).toBe(3); expect(activityLevel(0, 4)).toBe(0);
+  });
+  it("parses supported created values and rejects impossible dates", () => {
+    const fallback = new Date(2026, 8, 23, 12).getTime();
+    expect(resolveCreatedDate("2021/6/28 17:05", fallback)).toBe("2021-06-28");
+    expect(resolveCreatedDate("2025-03-02", fallback)).toBe("2025-03-02");
+    expect(resolveCreatedDate("2026-99-99", fallback)).toBe("2026-09-23");
+    expect(resolveCreatedDate(null, fallback)).toBe("2026-09-23");
   });
   it("summarizes top-level folders and root notes", () => {
     const result = aggregateTopFolders([{ path: "Areas/a.md", words: 10, ctime: 1, mtime: 1 }, { path: "Areas/b.md", words: 20, ctime: 1, mtime: 1 }, { path: "root.md", words: 5, ctime: 1, mtime: 1 }]);

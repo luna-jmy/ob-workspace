@@ -18,10 +18,15 @@ export class VaultIndex {
     const incoming = new Map<string, number>();
     const resolved = this.app.metadataCache.resolvedLinks;
     for (const targets of Object.values(resolved)) for (const [path, count] of Object.entries(targets)) incoming.set(path, (incoming.get(path) ?? 0) + count);
-    const notes = await Promise.all(markdown.map(async (file) => ({
-      path: file.path, ctime: file.stat.ctime, mtime: file.stat.mtime, words: countReadableWords(await this.app.vault.cachedRead(file)),
-      outgoing: Object.values(resolved[file.path] ?? {}).reduce((sum, count) => sum + count, 0), incoming: incoming.get(file.path) ?? 0
-    })));
+    const notes = await Promise.all(markdown.map(async (file) => {
+      const cache = this.app.metadataCache.getFileCache(file);
+      const frontmatter: Record<string, unknown> | undefined = cache?.frontmatter;
+      return {
+        path: file.path, ctime: file.stat.ctime, mtime: file.stat.mtime, frontmatterCreated: frontmatter?.created,
+        words: countReadableWords(await this.app.vault.cachedRead(file)),
+        outgoing: Object.values(resolved[file.path] ?? {}).reduce((sum, count) => sum + count, 0), incoming: incoming.get(file.path) ?? 0
+      };
+    }));
     const files = this.app.vault.getFiles().filter((file) => this.included(file.path));
     const attachmentPaths = files.filter((file) => file.extension !== "md").map((file) => file.path);
     const folderPaths = [...new Set(files.map((file) => file.parent?.path).filter((path): path is string => Boolean(path)))];
