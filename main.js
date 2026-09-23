@@ -41,7 +41,7 @@ var en = {
   "\u4ECA\u65E5\u4EFB\u52A1": "Today's tasks",
   "\u5FEB\u901F\u8DF3\u8F6C": "Quick jump",
   "\u547D\u4EE4\u6309\u94AE": "Command buttons",
-  "\u5B57\u6570\u4E0E\u8D8B\u52BF": "Words & trends",
+  "\u6BCF\u65E5\u5B57\u6570\u53D8\u5316": "Daily word change",
   "\u5199\u4F5C\u70ED\u529B\u56FE": "Writing heatmap",
   "\u53CC\u94FE\u7EDF\u8BA1\u56FE": "Internal link trend",
   "\u77E5\u8BC6\u5E93\u7ED3\u6784\u5206\u6790": "Knowledge base structure",
@@ -67,7 +67,11 @@ var en = {
   "\u591A": "More",
   "\u5929": "days",
   "\u5DF2\u89E3\u6790\u5185\u90E8\u94FE\u63A5\u603B\u91CF": "Total resolved internal links",
-  "\u865A\u7EBF\u4E3A\u6309\u7B14\u8BB0\u521B\u5EFA\u65E5\u671F\u4F30\u7B97\u7684\u5386\u53F2": "The dashed segment is historical data estimated from note creation dates",
+  "\u6700\u8FD1 30 \u5929": "Last 30 days",
+  "\u6BCF\u65E5\u51C0\u589E\u51CF": "Daily net change",
+  "\u65E0\u53EF\u6BD4\u8F83\u6570\u636E": "No comparable data",
+  "\u659C\u7EB9\u67F1\u6309 created \u4F30\u7B97\uFF1B\u8FDE\u7EED\u771F\u5B9E\u5FEB\u7167\u624D\u4EE3\u8868\u5B9E\u9645\u51C0\u53D8\u5316": "Striped bars are estimated from created; only consecutive real snapshots show actual net change",
+  "\u865A\u7EBF\u6309 created \u4F30\u7B97\u7B14\u8BB0\u51FA\u73B0\u65F6\u95F4\uFF0C\u65E0\u6CD5\u8FD8\u539F\u94FE\u63A5\u5B9E\u9645\u6DFB\u52A0\u65E5\u671F": "The dashed line estimates when notes appeared from created; it cannot reconstruct when links were actually added",
   "\u6309\u4E00\u7EA7\u76EE\u5F55\u7EDF\u8BA1 Markdown \u7B14\u8BB0": "Markdown notes grouped by top-level folder",
   "\u6839\u76EE\u5F55": "Vault root",
   "\u7BC7": "notes",
@@ -480,6 +484,57 @@ function svgClasses(...tokens) {
   return tokens;
 }
 
+// src/history/history.ts
+function upsertSnapshot(history, snapshot) {
+  return [...history.filter((item) => item.date !== snapshot.date), snapshot].sort((a, b) => a.date.localeCompare(b.date));
+}
+function estimateHistory(notes) {
+  const dates = [...new Set(notes.map((note) => note.created))].sort();
+  return dates.map((date) => {
+    const present = notes.filter((note) => note.created <= date);
+    return { date, notes: present.length, words: present.reduce((sum, note) => sum + note.words, 0), links: present.reduce((sum, note) => sum + note.links, 0), estimated: true };
+  });
+}
+function parseLocalDate(value) {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(year, month - 1, day);
+  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day ? date : null;
+}
+function localDateKey2(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+function dailyWordChanges(history, endDate, days = 30) {
+  const end = parseLocalDate(endDate);
+  if (!end || days < 1) return [];
+  const sorted = [...history].sort((a, b) => a.date.localeCompare(b.date));
+  const start = new Date(end);
+  start.setDate(start.getDate() - days);
+  const totals = [];
+  let snapshotIndex = 0;
+  let latest;
+  for (let offset = 0; offset <= days; offset += 1) {
+    const date = new Date(start);
+    date.setDate(start.getDate() + offset);
+    const key = localDateKey2(date);
+    while (snapshotIndex < sorted.length && sorted[snapshotIndex].date <= key) {
+      latest = sorted[snapshotIndex];
+      snapshotIndex += 1;
+    }
+    totals.push(latest ? { date: key, words: latest.words, estimated: Boolean(latest.estimated), exact: latest.date === key } : null);
+  }
+  return totals.slice(1).map((current, index) => {
+    var _a;
+    const previous = totals[index];
+    const date = (_a = current == null ? void 0 : current.date) != null ? _a : localDateKey2(new Date(start.getFullYear(), start.getMonth(), start.getDate() + index + 1));
+    if (!current || !previous) return { date, words: null, estimated: true };
+    return { date, words: current.words - previous.words, estimated: current.estimated || previous.estimated || !current.exact || !previous.exact };
+  });
+}
+
 // src/components/registry.ts
 function paramString(value, fallback = "") {
   return typeof value === "string" || typeof value === "number" || typeof value === "boolean" ? String(value) : fallback;
@@ -676,35 +731,49 @@ var baseView = {
 };
 var wordsTrend = {
   id: "builtin/trends",
-  name: "\u5B57\u6570\u4E0E\u8D8B\u52BF",
-  icon: "chart-line",
+  name: "\u6BCF\u65E5\u5B57\u6570\u53D8\u5316",
+  icon: "chart-no-axes-column-increasing",
   description: "",
   params: [],
   async render(container, _block, _host, plugin) {
+    var _a;
+    const metrics = await plugin.index.metrics();
+    await plugin.recordHistory(metrics);
     const history = plugin.config.showEstimatedHistory ? plugin.data.history : plugin.data.history.filter((point) => !point.estimated);
-    if (!history.length) {
+    const points = dailyWordChanges(history, moment().format("YYYY-MM-DD"), 30);
+    const available = points.filter((point) => point.words !== null);
+    if (!available.length) {
       container.createDiv({ text: t("\u6682\u65E0\u5185\u5BB9"), cls: "cw-empty" });
       return;
     }
-    const points = history.slice(-90);
-    const max = Math.max(...points.map((point) => point.words), 1);
+    const max = Math.max(...available.map((point) => Math.abs(point.words)), 1);
+    const summary = container.createDiv({ cls: "cw-analytics-summary" });
+    summary.createSpan({ text: t("\u6700\u8FD1 30 \u5929") });
+    summary.createSpan({ text: t("\u6BCF\u65E5\u51C0\u589E\u51CF") });
     const frame = container.createDiv({ cls: "cw-chart-frame" });
     const yAxis = frame.createDiv({ cls: "cw-chart-y-axis" });
-    yAxis.createSpan({ text: max.toLocaleString() });
-    yAxis.createSpan({ text: Math.round(max / 2).toLocaleString() });
+    yAxis.createSpan({ text: `+${max.toLocaleString()}` });
     yAxis.createSpan({ text: "0" });
+    yAxis.createSpan({ text: `\u2212${max.toLocaleString()}` });
     const plot = frame.createDiv({ cls: "cw-chart-plot" });
-    plot.createDiv({ text: t("\u53EF\u8BFB\u5B57\u6570"), cls: "cw-chart-metric" });
     const chart = plot.createDiv({ cls: "cw-chart" });
     for (const point of points) {
-      const bar = chart.createDiv({ cls: `cw-chart__bar${point.estimated ? " is-estimated" : ""}` });
-      bar.style.setProperty("--cw-bar-height", `${Math.max(2, point.words / max * 100)}%`);
-      bar.ariaLabel = `${point.date}: ${point.words}`;
+      const value = (_a = point.words) != null ? _a : 0;
+      const classes = ["cw-chart__bar", value < 0 ? "is-negative" : "is-positive"];
+      if (point.estimated) classes.push("is-estimated");
+      if (point.words === null) classes.push("is-missing");
+      const column = chart.createDiv({ cls: "cw-chart__column" });
+      const bar = column.createDiv({ cls: classes.join(" ") });
+      bar.style.setProperty("--cw-bar-height", `${Math.abs(value) / max * 50}%`);
+      const label = point.words === null ? t("\u65E0\u53EF\u6BD4\u8F83\u6570\u636E") : `${value >= 0 ? "+" : "\u2212"}${Math.abs(value).toLocaleString()}`;
+      column.setAttr("title", `${point.date}: ${label}`);
+      column.ariaLabel = `${point.date}: ${label}`;
     }
     const xAxis = plot.createDiv({ cls: "cw-chart-x-axis" });
     xAxis.createSpan({ text: points[0].date.slice(5) });
     xAxis.createSpan({ text: points[Math.floor(points.length / 2)].date.slice(5) });
     xAxis.createSpan({ text: points[points.length - 1].date.slice(5) });
+    if (points.some((point) => point.estimated)) container.createDiv({ text: t("\u659C\u7EB9\u67F1\u6309 created \u4F30\u7B97\uFF1B\u8FDE\u7EED\u771F\u5B9E\u5FEB\u7167\u624D\u4EE3\u8868\u5B9E\u9645\u51C0\u53D8\u5316"), cls: "cw-analytics-note" });
   }
 };
 var activityHeatmap = {
@@ -751,7 +820,8 @@ var linkTrend = {
     const metrics = await plugin.index.metrics();
     await plugin.recordHistory(metrics);
     const range = Math.max(1, paramNumber(block.params.range, 365));
-    const history = (plugin.config.showEstimatedHistory ? plugin.data.history : plugin.data.history.filter((point) => !point.estimated)).slice(-range);
+    const cutoff = moment().subtract(range - 1, "days").format("YYYY-MM-DD");
+    const history = (plugin.config.showEstimatedHistory ? plugin.data.history : plugin.data.history.filter((point) => !point.estimated)).filter((point) => point.date >= cutoff);
     if (!history.length) {
       container.createDiv({ text: t("\u6682\u65E0\u5185\u5BB9"), cls: "cw-empty" });
       return;
@@ -784,7 +854,7 @@ var linkTrend = {
     const xAxis = plot.createDiv({ cls: "cw-link-chart-x" });
     xAxis.createSpan({ text: history[0].date.slice(5) });
     xAxis.createSpan({ text: last.date.slice(5) });
-    if (history.some((point) => point.estimated)) container.createDiv({ text: t("\u865A\u7EBF\u4E3A\u6309\u7B14\u8BB0\u521B\u5EFA\u65E5\u671F\u4F30\u7B97\u7684\u5386\u53F2"), cls: "cw-analytics-note" });
+    if (history.some((point) => point.estimated)) container.createDiv({ text: t("\u865A\u7EBF\u6309 created \u4F30\u7B97\u7B14\u8BB0\u51FA\u73B0\u65F6\u95F4\uFF0C\u65E0\u6CD5\u8FD8\u539F\u94FE\u63A5\u5B9E\u9645\u6DFB\u52A0\u65E5\u671F"), cls: "cw-analytics-note" });
   }
 };
 var structureAnalysis = {
@@ -844,7 +914,7 @@ function componentName(definition) {
     "builtin/today-tasks": t("\u4ECA\u65E5\u4EFB\u52A1"),
     "builtin/quick-jump": t("\u5FEB\u901F\u8DF3\u8F6C"),
     "builtin/command-buttons": t("\u547D\u4EE4\u6309\u94AE"),
-    "builtin/trends": t("\u5B57\u6570\u4E0E\u8D8B\u52BF"),
+    "builtin/trends": t("\u6BCF\u65E5\u5B57\u6570\u53D8\u5316"),
     "builtin/activity-heatmap": t("\u5199\u4F5C\u70ED\u529B\u56FE"),
     "builtin/link-trend": t("\u53CC\u94FE\u7EDF\u8BA1\u56FE"),
     "builtin/structure": t("\u77E5\u8BC6\u5E93\u7ED3\u6784\u5206\u6790"),
@@ -1317,7 +1387,7 @@ var DEFAULT_SETTINGS = {
   allowScripts: false
 };
 var DEFAULT_DATA = {
-  version: 3,
+  version: 4,
   settings: DEFAULT_SETTINGS,
   workspace: { blocks: [
     { id: "default-stats", componentId: "builtin/vault-stats", span: 12, params: {} },
@@ -1350,13 +1420,15 @@ function mergeSettings(value) {
 function migrateData(value) {
   if (!isRecord(value)) return structuredClone(DEFAULT_DATA);
   const workspace = isRecord(value.workspace) && Array.isArray(value.workspace.blocks) ? { blocks: value.workspace.blocks.filter(isBlock).filter((block) => block.componentId !== "builtin/graph").map(migrateBlock) } : structuredClone(DEFAULT_DATA.workspace);
-  const history = Array.isArray(value.history) ? value.history.filter(isSnapshot) : [];
+  const sourceVersion = typeof value.version === "number" ? value.version : 0;
+  const storedHistory = Array.isArray(value.history) ? value.history.filter(isSnapshot) : [];
+  const history = sourceVersion < 4 ? storedHistory.filter((point) => !point.estimated) : storedHistory;
   return {
-    version: 3,
+    version: 4,
     settings: mergeSettings(value.settings),
     workspace,
     history,
-    historyInitialized: typeof value.historyInitialized === "boolean" ? value.historyInitialized : history.length > 0
+    historyInitialized: sourceVersion < 4 ? false : typeof value.historyInitialized === "boolean" ? value.historyInitialized : history.length > 0
   };
 }
 function migrateBlock(block) {
@@ -1552,18 +1624,6 @@ function classifyTask(task, fileDate, today, recentCutoff) {
   return null;
 }
 
-// src/history/history.ts
-function upsertSnapshot(history, snapshot) {
-  return [...history.filter((item) => item.date !== snapshot.date), snapshot].sort((a, b) => a.date.localeCompare(b.date));
-}
-function estimateHistory(notes) {
-  const dates = [...new Set(notes.map((note) => note.created))].sort();
-  return dates.map((date) => {
-    const present = notes.filter((note) => note.created <= date);
-    return { date, notes: present.length, words: present.reduce((sum, note) => sum + note.words, 0), links: present.reduce((sum, note) => sum + note.links, 0), estimated: true };
-  });
-}
-
 // src/main.ts
 var CustomWorkspacePlugin = class extends import_obsidian8.Plugin {
   constructor() {
@@ -1576,6 +1636,7 @@ var CustomWorkspacePlugin = class extends import_obsidian8.Plugin {
     this.scripts = /* @__PURE__ */ new Map();
     this.alive = false;
     this.saveChain = Promise.resolve();
+    this.historyChain = Promise.resolve();
   }
   async onload() {
     this.alive = true;
@@ -1741,21 +1802,36 @@ container.createEl("p", { text: String(params.title) });
     }
   }
   async recordHistory(metrics) {
+    const operation = this.historyChain.then(() => this.writeHistory(metrics));
+    this.historyChain = operation.catch(() => void 0);
+    await operation;
+  }
+  async writeHistory(metrics) {
     const today = moment().format("YYYY-MM-DD");
+    let rebuilt = false;
     if (!this.data.historyInitialized) {
-      const notes = await Promise.all(this.app.vault.getMarkdownFiles().filter((file) => !this.config.excludedFolders.some((folder) => file.path.startsWith(`${folder}/`))).map(async (file) => {
-        var _a;
+      const files = this.app.vault.getMarkdownFiles().filter((file) => !this.config.excludedFolders.some((folder) => file.path === folder || file.path.startsWith(`${folder}/`)));
+      const notes = await Promise.all(files.map(async (file) => {
+        var _a, _b;
+        const cache = this.app.metadataCache.getFileCache(file);
         return {
-          created: moment(file.stat.ctime).format("YYYY-MM-DD"),
+          created: resolveCreatedDate((_a = cache == null ? void 0 : cache.frontmatter) == null ? void 0 : _a.created, file.stat.ctime),
           words: countReadableWords(await this.app.vault.cachedRead(file)),
-          links: Object.values((_a = this.app.metadataCache.resolvedLinks[file.path]) != null ? _a : {}).reduce((sum, value) => sum + value, 0)
+          links: Object.values((_b = this.app.metadataCache.resolvedLinks[file.path]) != null ? _b : {}).reduce((sum, value) => sum + value, 0)
         };
       }));
-      this.data.history = estimateHistory(notes).filter((point) => point.date < today);
+      const actual = this.data.history.filter((point) => !point.estimated);
+      const actualDates = new Set(actual.map((point) => point.date));
+      const estimated = estimateHistory(notes).filter((point) => point.date < today && !actualDates.has(point.date));
+      this.data.history = [...estimated, ...actual].sort((a, b) => a.date.localeCompare(b.date));
       this.data.historyInitialized = true;
+      rebuilt = true;
     }
     const current = this.data.history.find((point) => point.date === today);
-    if (current && !current.estimated && current.notes === metrics.notes && current.links === metrics.links && current.words === metrics.words) return;
+    if (current && !current.estimated && current.notes === metrics.notes && current.links === metrics.links && current.words === metrics.words) {
+      if (rebuilt) await this.persist();
+      return;
+    }
     this.data.history = upsertSnapshot(this.data.history, { date: today, notes: metrics.notes, links: metrics.links, words: metrics.words });
     await this.persist();
   }

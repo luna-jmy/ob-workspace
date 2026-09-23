@@ -11,6 +11,7 @@ import { parseScriptMetadata } from "./params/parser";
 import { classifyTask, parseTaskLine } from "./tasks/parser";
 import { estimateHistory, upsertSnapshot } from "./history/history";
 import { countReadableWords } from "./metrics/text";
+import { resolveCreatedDate } from "./metrics/analytics";
 import type { VaultMetrics } from "./metrics/aggregate";
 import { moment } from "./services/date";
 
@@ -25,6 +26,7 @@ export default class CustomWorkspacePlugin extends Plugin {
   private scripts = new Map<string, ComponentDefinition>();
   private alive = false;
   private saveChain: Promise<void> = Promise.resolve();
+  private historyChain: Promise<void> = Promise.resolve();
 
   async onload(): Promise<void> {
     this.alive = true;
@@ -123,16 +125,30 @@ export default class CustomWorkspacePlugin extends Plugin {
   }
 
   async recordHistory(metrics: VaultMetrics): Promise<void> {
+    const operation = this.historyChain.then(() => this.writeHistory(metrics));
+    this.historyChain = operation.catch(() => undefined);
+    await operation;
+  }
+  private async writeHistory(metrics: VaultMetrics): Promise<void> {
     const today = moment().format("YYYY-MM-DD");
+    let rebuilt = false;
     if (!this.data.historyInitialized) {
-      const notes = await Promise.all(this.app.vault.getMarkdownFiles().filter((file) => !this.config.excludedFolders.some((folder) => file.path.startsWith(`${folder}/`))).map(async (file) => ({
-        created: moment(file.stat.ctime).format("YYYY-MM-DD"), words: countReadableWords(await this.app.vault.cachedRead(file)),
-        links: Object.values(this.app.metadataCache.resolvedLinks[file.path] ?? {}).reduce((sum, value) => sum + value, 0)
-      })));
-      this.data.history = estimateHistory(notes).filter((point) => point.date < today); this.data.historyInitialized = true;
+      const files = this.app.vault.getMarkdownFiles().filter((file) => !this.config.excludedFolders.some((folder) => file.path === folder || file.path.startsWith(`${folder}/`)));
+      const notes = await Promise.all(files.map(async (file) => {
+        const cache = this.app.metadataCache.getFileCache(file);
+        return { created: resolveCreatedDate(cache?.frontmatter?.created, file.stat.ctime), words: countReadableWords(await this.app.vault.cachedRead(file)),
+          links: Object.values(this.app.metadataCache.resolvedLinks[file.path] ?? {}).reduce((sum, value) => sum + value, 0) };
+      }));
+      const actual = this.data.history.filter((point) => !point.estimated); const actualDates = new Set(actual.map((point) => point.date));
+      const estimated = estimateHistory(notes).filter((point) => point.date < today && !actualDates.has(point.date));
+      this.data.history = [...estimated, ...actual].sort((a, b) => a.date.localeCompare(b.date)); this.data.historyInitialized = true;
+      rebuilt = true;
     }
     const current = this.data.history.find((point) => point.date === today);
-    if (current && !current.estimated && current.notes === metrics.notes && current.links === metrics.links && current.words === metrics.words) return;
+    if (current && !current.estimated && current.notes === metrics.notes && current.links === metrics.links && current.words === metrics.words) {
+      if (rebuilt) await this.persist();
+      return;
+    }
     this.data.history = upsertSnapshot(this.data.history, { date: today, notes: metrics.notes, links: metrics.links, words: metrics.words });
     await this.persist();
   }

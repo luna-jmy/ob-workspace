@@ -9,6 +9,7 @@ import { moment } from "../services/date";
 import { DetailModal } from "../ui/detail-modal";
 import { activityLevel, areaPath, linePathRange } from "../metrics/analytics";
 import { svgClasses } from "../ui/classes";
+import { dailyWordChanges } from "../history/history";
 
 function paramString(value: ParamValue | undefined, fallback = ""): string {
   return typeof value === "string" || typeof value === "number" || typeof value === "boolean" ? String(value) : fallback;
@@ -145,20 +146,30 @@ const baseView: ComponentDefinition = {
 };
 
 const wordsTrend: ComponentDefinition = {
-  id: "builtin/trends", name: "字数与趋势", icon: "chart-line", description: "", params: [],
+  id: "builtin/trends", name: "每日字数变化", icon: "chart-no-axes-column-increasing", description: "", params: [],
   async render(container, _block, _host, plugin) {
+    const metrics = await plugin.index.metrics(); await plugin.recordHistory(metrics);
     const history = plugin.config.showEstimatedHistory ? plugin.data.history : plugin.data.history.filter((point) => !point.estimated);
-    if (!history.length) { container.createDiv({ text: t("暂无内容"), cls: "cw-empty" }); return; }
-    const points = history.slice(-90); const max = Math.max(...points.map((point) => point.words), 1);
+    const points = dailyWordChanges(history, moment().format("YYYY-MM-DD"), 30);
+    const available = points.filter((point): point is typeof point & { words: number } => point.words !== null);
+    if (!available.length) { container.createDiv({ text: t("暂无内容"), cls: "cw-empty" }); return; }
+    const max = Math.max(...available.map((point) => Math.abs(point.words)), 1);
+    const summary = container.createDiv({ cls: "cw-analytics-summary" }); summary.createSpan({ text: t("最近 30 天") });
+    summary.createSpan({ text: t("每日净增减") });
     const frame = container.createDiv({ cls: "cw-chart-frame" });
-    const yAxis = frame.createDiv({ cls: "cw-chart-y-axis" }); yAxis.createSpan({ text: max.toLocaleString() }); yAxis.createSpan({ text: Math.round(max / 2).toLocaleString() }); yAxis.createSpan({ text: "0" });
-    const plot = frame.createDiv({ cls: "cw-chart-plot" }); plot.createDiv({ text: t("可读字数"), cls: "cw-chart-metric" });
+    const yAxis = frame.createDiv({ cls: "cw-chart-y-axis" }); yAxis.createSpan({ text: `+${max.toLocaleString()}` }); yAxis.createSpan({ text: "0" }); yAxis.createSpan({ text: `−${max.toLocaleString()}` });
+    const plot = frame.createDiv({ cls: "cw-chart-plot" });
     const chart = plot.createDiv({ cls: "cw-chart" });
     for (const point of points) {
-      const bar = chart.createDiv({ cls: `cw-chart__bar${point.estimated ? " is-estimated" : ""}` });
-      bar.style.setProperty("--cw-bar-height", `${Math.max(2, point.words / max * 100)}%`); bar.ariaLabel = `${point.date}: ${point.words}`;
+      const value = point.words ?? 0; const classes = ["cw-chart__bar", value < 0 ? "is-negative" : "is-positive"];
+      if (point.estimated) classes.push("is-estimated"); if (point.words === null) classes.push("is-missing");
+      const column = chart.createDiv({ cls: "cw-chart__column" }); const bar = column.createDiv({ cls: classes.join(" ") });
+      bar.style.setProperty("--cw-bar-height", `${Math.abs(value) / max * 50}%`);
+      const label = point.words === null ? t("无可比较数据") : `${value >= 0 ? "+" : "−"}${Math.abs(value).toLocaleString()}`;
+      column.setAttr("title", `${point.date}: ${label}`); column.ariaLabel = `${point.date}: ${label}`;
     }
     const xAxis = plot.createDiv({ cls: "cw-chart-x-axis" }); xAxis.createSpan({ text: points[0].date.slice(5) }); xAxis.createSpan({ text: points[Math.floor(points.length / 2)].date.slice(5) }); xAxis.createSpan({ text: points[points.length - 1].date.slice(5) });
+    if (points.some((point) => point.estimated)) container.createDiv({ text: t("斜纹柱按 created 估算；连续真实快照才代表实际净变化"), cls: "cw-analytics-note" });
   }
 };
 
@@ -190,7 +201,8 @@ const linkTrend: ComponentDefinition = {
   async render(container, block, _host, plugin) {
     const metrics = await plugin.index.metrics(); await plugin.recordHistory(metrics);
     const range = Math.max(1, paramNumber(block.params.range, 365));
-    const history = (plugin.config.showEstimatedHistory ? plugin.data.history : plugin.data.history.filter((point) => !point.estimated)).slice(-range);
+    const cutoff = moment().subtract(range - 1, "days").format("YYYY-MM-DD");
+    const history = (plugin.config.showEstimatedHistory ? plugin.data.history : plugin.data.history.filter((point) => !point.estimated)).filter((point) => point.date >= cutoff);
     if (!history.length) { container.createDiv({ text: t("暂无内容"), cls: "cw-empty" }); return; }
     const values = history.map((point) => point.links); const maximum = Math.max(1, ...values); const last = history[history.length - 1];
     const summary = container.createDiv({ cls: "cw-analytics-summary" }); summary.createSpan({ text: `${range} ${t("天")}` }); summary.createSpan({ text: last.links.toLocaleString() });
@@ -208,7 +220,7 @@ const linkTrend: ComponentDefinition = {
     if (history.some((point) => !point.estimated)) svg.createSvg("path", { cls: "cw-link-chart__line", attr: { d: linePathRange(values, maximum, actualStart, history.length - 1) } });
     svg.createSvg("circle", { cls: "cw-link-chart__point", attr: { cx: "100", cy: String(48 - last.links / maximum * 48), r: "1.2" } });
     const xAxis = plot.createDiv({ cls: "cw-link-chart-x" }); xAxis.createSpan({ text: history[0].date.slice(5) }); xAxis.createSpan({ text: last.date.slice(5) });
-    if (history.some((point) => point.estimated)) container.createDiv({ text: t("虚线为按笔记创建日期估算的历史"), cls: "cw-analytics-note" });
+    if (history.some((point) => point.estimated)) container.createDiv({ text: t("虚线按 created 估算笔记出现时间，无法还原链接实际添加日期"), cls: "cw-analytics-note" });
   }
 };
 
@@ -242,7 +254,7 @@ export function builtinById(id: string): ComponentDefinition | undefined { retur
 export function componentName(definition: ComponentDefinition): string {
   const names: Record<string, string> = {
     "builtin/vault-stats": t("仓库统计"), "builtin/today-tasks": t("今日任务"), "builtin/quick-jump": t("快速跳转"),
-    "builtin/command-buttons": t("命令按钮"), "builtin/trends": t("字数与趋势"), "builtin/activity-heatmap": t("写作热力图"),
+    "builtin/command-buttons": t("命令按钮"), "builtin/trends": t("每日字数变化"), "builtin/activity-heatmap": t("写作热力图"),
     "builtin/link-trend": t("双链统计图"), "builtin/structure": t("知识库结构分析"), "builtin/quick-create": t("快速新建"), "builtin/base": t("Base 视图"),
     "builtin/dataview": t("Dataview 查询")
   };

@@ -46,7 +46,7 @@ export const DEFAULT_SETTINGS: WorkspaceSettings = {
 };
 
 export const DEFAULT_DATA: CustomWorkspaceData = {
-  version: 3,
+  version: 4,
   settings: DEFAULT_SETTINGS,
   workspace: { blocks: [
     { id: "default-stats", componentId: "builtin/vault-stats", span: 12, params: {} },
@@ -82,9 +82,11 @@ export function migrateData(value: unknown): CustomWorkspaceData {
   if (!isRecord(value)) return structuredClone(DEFAULT_DATA);
   const workspace = isRecord(value.workspace) && Array.isArray(value.workspace.blocks)
     ? { blocks: value.workspace.blocks.filter(isBlock).filter((block) => block.componentId !== "builtin/graph").map(migrateBlock) } : structuredClone(DEFAULT_DATA.workspace);
-  const history = Array.isArray(value.history) ? value.history.filter(isSnapshot) : [];
-  return { version: 3, settings: mergeSettings(value.settings), workspace, history,
-    historyInitialized: typeof value.historyInitialized === "boolean" ? value.historyInitialized : history.length > 0 };
+  const sourceVersion = typeof value.version === "number" ? value.version : 0;
+  const storedHistory = Array.isArray(value.history) ? value.history.filter(isSnapshot) : [];
+  const history = sourceVersion < 4 ? storedHistory.filter((point) => !point.estimated) : storedHistory;
+  return { version: 4, settings: mergeSettings(value.settings), workspace, history,
+    historyInitialized: sourceVersion < 4 ? false : typeof value.historyInitialized === "boolean" ? value.historyInitialized : history.length > 0 };
 }
 
 function migrateBlock(block: Block): Block {

@@ -4,7 +4,7 @@ import { aggregateMetrics } from "../src/metrics/aggregate";
 import { assignedDate, classifyTask, parseTaskLine } from "../src/tasks/parser";
 import { parseScriptMetadata, renderFilenamePattern, withParamDefaults } from "../src/params/parser";
 import { cycleSpan, moveBlock, moveBlockTo } from "../src/workspace/layout";
-import { estimateHistory, upsertSnapshot } from "../src/history/history";
+import { dailyWordChanges, estimateHistory, upsertSnapshot } from "../src/history/history";
 import { DEFAULT_DATA, mergeSettings, migrateData, type Block } from "../src/types";
 import { activityLevel, aggregateHeatmap, aggregateTopFolders, areaPath, linePathRange, resolveCreatedDate } from "../src/metrics/analytics";
 import { svgClasses } from "../src/ui/classes";
@@ -129,6 +129,23 @@ describe("history", () => {
     const points = estimateHistory([{ created: "2026-01-01", words: 2, links: 1 }, { created: "2026-01-02", words: 3, links: 2 }]);
     expect(points[1]).toEqual({ date: "2026-01-02", notes: 2, words: 5, links: 3, estimated: true });
   });
+  it("builds 30 calendar-day net changes around zero", () => {
+    const points = dailyWordChanges([
+      { date: "2026-09-20", notes: 1, links: 1, words: 100 },
+      { date: "2026-09-21", notes: 1, links: 1, words: 130 },
+      { date: "2026-09-22", notes: 1, links: 1, words: 90 },
+      { date: "2026-09-23", notes: 1, links: 1, words: 95 }
+    ], "2026-09-23", 3);
+    expect(points.map((point) => point.words)).toEqual([30, -40, 5]);
+    expect(points.every((point) => !point.estimated)).toBe(true);
+  });
+  it("marks changes across estimates or missing daily snapshots as estimated", () => {
+    const points = dailyWordChanges([
+      { date: "2026-09-20", notes: 1, links: 1, words: 100, estimated: true },
+      { date: "2026-09-22", notes: 1, links: 1, words: 150 }
+    ], "2026-09-22", 2);
+    expect(points).toMatchObject([{ words: 0, estimated: true }, { words: 50, estimated: true }]);
+  });
 });
 
 describe("settings migration", () => {
@@ -142,10 +159,17 @@ describe("settings migration", () => {
   });
   it("migrates the removed health component into selected vault stats", () => {
     const migrated = migrateData({ workspace: { blocks: [{ id: "health", componentId: "builtin/note-health", span: 6, params: {} }] } });
-    expect(migrated.version).toBe(3); expect(migrated.workspace.blocks[0]).toMatchObject({ componentId: "builtin/vault-stats", params: { items: ["orphans", "empty", "short"] } });
+    expect(migrated.version).toBe(4); expect(migrated.workspace.blocks[0]).toMatchObject({ componentId: "builtin/vault-stats", params: { items: ["orphans", "empty", "short"] } });
   });
   it("removes obsolete graph blocks without disturbing other components", () => {
     const migrated = migrateData({ workspace: { blocks: [{ id: "graph", componentId: "builtin/graph", span: 12, params: {} }, { id: "keep", componentId: "builtin/trends", span: 6, params: {} }] } });
     expect(migrated.workspace.blocks.map((block) => block.id)).toEqual(["keep"]);
+  });
+  it("rebuilds old estimates while preserving real snapshots", () => {
+    const migrated = migrateData({ version: 3, historyInitialized: true, workspace: { blocks: [] }, history: [
+      { date: "2026-09-22", notes: 10, links: 20, words: 30, estimated: true },
+      { date: "2026-09-23", notes: 11, links: 22, words: 33 }
+    ] });
+    expect(migrated).toMatchObject({ version: 4, historyInitialized: false, history: [{ date: "2026-09-23", notes: 11, links: 22, words: 33 }] });
   });
 });
