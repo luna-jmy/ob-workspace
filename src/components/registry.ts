@@ -7,6 +7,7 @@ import { t } from "../i18n";
 import { runScript } from "../services/script-runner";
 import { moment } from "../services/date";
 import { DetailModal } from "../ui/detail-modal";
+import { activityLevel, areaPath, linePathRange } from "../metrics/analytics";
 
 function paramString(value: ParamValue | undefined, fallback = ""): string {
   return typeof value === "string" || typeof value === "number" || typeof value === "boolean" ? String(value) : fallback;
@@ -94,11 +95,6 @@ const commandButtons: ComponentDefinition = {
   }
 };
 
-const graph: ComponentDefinition = {
-  id: "builtin/graph", name: "知识图谱", icon: "git-fork", description: "", params: [],
-  async render(container) { unavailable(container, t("Obsidian 暂未提供嵌入原生图谱的公开接口")); }
-};
-
 const templater: ComponentDefinition = {
   id: "builtin/quick-create", name: "快速新建", icon: "file-plus", description: "", params: [
     { key: "template", type: "note", defaultValue: "" }, { key: "folder", type: "folder", defaultValue: "" },
@@ -152,20 +148,85 @@ const wordsTrend: ComponentDefinition = {
   }
 };
 
+const activityHeatmap: ComponentDefinition = {
+  id: "builtin/activity-heatmap", name: "写作热力图", icon: "calendar-days", description: "", params: [],
+  async render(container, _block, _host, plugin) {
+    const data = await plugin.index.metrics(); const counts = new Map(data.activity.map((day) => [day.date, day.count]));
+    const maximum = Math.max(0, ...data.activity.map((day) => day.count)); const total = data.activity.reduce((sum, day) => sum + day.count, 0);
+    const summary = container.createDiv({ cls: "cw-analytics-summary" });
+    summary.createSpan({ text: t("过去 12 个月") }); summary.createSpan({ text: `${total.toLocaleString()} ${t("篇笔记")}` });
+    const grid = container.createDiv({ cls: "cw-heatmap", attr: { role: "img", "aria-label": t("按笔记最后修改日期统计") } });
+    const end = moment().startOf("day"); const start = end.clone().subtract(364, "days");
+    for (let index = 0; index < start.day(); index += 1) grid.createSpan({ cls: "cw-heatmap__blank", attr: { "aria-hidden": "true" } });
+    for (let index = 0; index < 365; index += 1) {
+      const date = start.clone().add(index, "days").format("YYYY-MM-DD"); const count = counts.get(date) ?? 0;
+      grid.createSpan({ cls: `cw-heatmap__day cw-heatmap__day--${activityLevel(count, maximum)}`, attr: { title: `${date}: ${count}`, "aria-label": `${date}: ${count}` } });
+    }
+    const footer = container.createDiv({ cls: "cw-heatmap-legend" }); footer.createSpan({ text: t("少") });
+    for (let level = 1; level <= 5; level += 1) footer.createSpan({ cls: `cw-heatmap__day cw-heatmap__day--${level}`, attr: { "aria-hidden": "true" } });
+    footer.createSpan({ text: t("多") }); container.createDiv({ text: t("按笔记最后修改日期统计"), cls: "cw-analytics-note" });
+  }
+};
+
+const linkTrend: ComponentDefinition = {
+  id: "builtin/link-trend", name: "双链统计图", icon: "link-2", description: "", params: [{ key: "range", type: "select:90,180,365", defaultValue: "365" }],
+  async render(container, block, _host, plugin) {
+    const metrics = await plugin.index.metrics(); await plugin.recordHistory(metrics);
+    const range = Math.max(1, paramNumber(block.params.range, 365));
+    const history = (plugin.config.showEstimatedHistory ? plugin.data.history : plugin.data.history.filter((point) => !point.estimated)).slice(-range);
+    if (!history.length) { container.createDiv({ text: t("暂无内容"), cls: "cw-empty" }); return; }
+    const values = history.map((point) => point.links); const maximum = Math.max(1, ...values); const last = history[history.length - 1];
+    const summary = container.createDiv({ cls: "cw-analytics-summary" }); summary.createSpan({ text: `${range} ${t("天")}` }); summary.createSpan({ text: last.links.toLocaleString() });
+    const frame = container.createDiv({ cls: "cw-link-chart-frame" });
+    const yAxis = frame.createDiv({ cls: "cw-link-chart-y" }); yAxis.createSpan({ text: maximum.toLocaleString() }); yAxis.createSpan({ text: Math.round(maximum / 2).toLocaleString() }); yAxis.createSpan({ text: "0" });
+    const plot = frame.createDiv({ cls: "cw-link-chart-plot" });
+    const svg = plot.createSvg("svg", { cls: "cw-link-chart", attr: { viewBox: "0 0 100 48", preserveAspectRatio: "none", role: "img", "aria-label": t("已解析内部链接总量") } });
+    svg.createSvg("line", { cls: "cw-link-chart__grid", attr: { x1: "0", y1: "0", x2: "100", y2: "0" } });
+    svg.createSvg("line", { cls: "cw-link-chart__grid", attr: { x1: "0", y1: "24", x2: "100", y2: "24" } });
+    svg.createSvg("line", { cls: "cw-link-chart__grid", attr: { x1: "0", y1: "48", x2: "100", y2: "48" } });
+    svg.createSvg("path", { cls: "cw-link-chart__area", attr: { d: areaPath(values, maximum) } });
+    let lastEstimated = -1; history.forEach((point, index) => { if (point.estimated) lastEstimated = index; });
+    if (lastEstimated >= 0) svg.createSvg("path", { cls: "cw-link-chart__line is-estimated", attr: { d: linePathRange(values, maximum, 0, lastEstimated) } });
+    const actualStart = Math.max(0, history.findIndex((point) => !point.estimated) - 1);
+    if (history.some((point) => !point.estimated)) svg.createSvg("path", { cls: "cw-link-chart__line", attr: { d: linePathRange(values, maximum, actualStart, history.length - 1) } });
+    svg.createSvg("circle", { cls: "cw-link-chart__point", attr: { cx: "100", cy: String(48 - last.links / maximum * 48), r: "1.2" } });
+    const xAxis = plot.createDiv({ cls: "cw-link-chart-x" }); xAxis.createSpan({ text: history[0].date.slice(5) }); xAxis.createSpan({ text: last.date.slice(5) });
+    if (history.some((point) => point.estimated)) container.createDiv({ text: t("虚线为按笔记创建日期估算的历史"), cls: "cw-analytics-note" });
+  }
+};
+
+const structureAnalysis: ComponentDefinition = {
+  id: "builtin/structure", name: "知识库结构分析", icon: "folders", description: "", params: [],
+  async render(container, _block, host, plugin) {
+    const data = await plugin.index.metrics();
+    if (!data.topFolders.length) { container.createDiv({ text: t("暂无内容"), cls: "cw-empty" }); return; }
+    container.createDiv({ text: t("按一级目录统计 Markdown 笔记"), cls: "cw-analytics-note cw-analytics-note--top" });
+    const maximum = Math.max(1, ...data.topFolders.map((folder) => folder.notes)); const grid = container.createDiv({ cls: "cw-structure" });
+    for (const folder of data.topFolders) {
+      const label = folder.name || t("根目录"); const row = grid.createEl("button", { cls: "cw-structure__row", attr: { "aria-label": `${label}: ${folder.notes} ${t("篇")}` } });
+      setIcon(row.createSpan({ cls: "cw-structure__icon" }), "folder"); const content = row.createSpan({ cls: "cw-structure__content" });
+      const heading = content.createSpan({ cls: "cw-structure__heading" }); heading.createSpan({ text: label, cls: "cw-structure__name" });
+      const figures = heading.createSpan({ cls: "cw-structure__figures" }); figures.createSpan({ text: `${folder.notes.toLocaleString()} ${t("篇")}` }); figures.createSpan({ text: `${new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 }).format(folder.words)} ${t("字")}` });
+      const track = content.createSpan({ cls: "cw-structure__track" }); const bar = track.createSpan({ cls: "cw-structure__bar" }); bar.style.setProperty("--cw-structure-width", `${folder.notes / maximum * 100}%`);
+      setIcon(row.createSpan({ cls: "cw-structure__chevron" }), "chevron-right"); host.registerDomEvent(row, "click", () => new DetailModal(plugin.app, label, folder.paths, plugin).open());
+    }
+  }
+};
+
 const todayTasks: ComponentDefinition = {
   id: "builtin/today-tasks", name: "今日任务", icon: "list-checks", description: "", params: [],
   async render(container, _block, host, plugin) { await plugin.renderTasks(container, host); }
 };
 
-const BUILTINS = [vaultStats, todayTasks, quickJump, commandButtons, wordsTrend, graph, templater, baseView, dataview];
+const BUILTINS = [vaultStats, todayTasks, quickJump, commandButtons, wordsTrend, activityHeatmap, linkTrend, structureAnalysis, templater, baseView, dataview];
 
 export function builtinDefinitions(): ComponentDefinition[] { return BUILTINS; }
 export function builtinById(id: string): ComponentDefinition | undefined { return BUILTINS.find((definition) => definition.id === id); }
 export function componentName(definition: ComponentDefinition): string {
   const names: Record<string, string> = {
     "builtin/vault-stats": t("仓库统计"), "builtin/today-tasks": t("今日任务"), "builtin/quick-jump": t("快速跳转"),
-    "builtin/command-buttons": t("命令按钮"), "builtin/trends": t("字数与趋势"),
-    "builtin/graph": t("知识图谱"), "builtin/quick-create": t("快速新建"), "builtin/base": t("Base 视图"),
+    "builtin/command-buttons": t("命令按钮"), "builtin/trends": t("字数与趋势"), "builtin/activity-heatmap": t("写作热力图"),
+    "builtin/link-trend": t("双链统计图"), "builtin/structure": t("知识库结构分析"), "builtin/quick-create": t("快速新建"), "builtin/base": t("Base 视图"),
     "builtin/dataview": t("Dataview 查询")
   };
   return names[definition.id] ?? definition.name;

@@ -6,6 +6,7 @@ import { parseScriptMetadata, renderFilenamePattern, withParamDefaults } from ".
 import { cycleSpan, moveBlock, moveBlockTo } from "../src/workspace/layout";
 import { estimateHistory, upsertSnapshot } from "../src/history/history";
 import { DEFAULT_DATA, mergeSettings, migrateData, type Block } from "../src/types";
+import { activityLevel, aggregateActivity, aggregateTopFolders, areaPath, linePathRange } from "../src/metrics/analytics";
 
 describe("markdown text metrics", () => {
   it("removes metadata, code, comments and URL targets", () => {
@@ -19,11 +20,27 @@ describe("markdown text metrics", () => {
 describe("metric aggregation", () => {
   it("computes counts and health lists", () => {
     const result = aggregateMetrics([
-      { path: "a.md", words: 0, ctime: 100, outgoing: 0, incoming: 0 },
-      { path: "b.md", words: 20, ctime: 200, outgoing: 2, incoming: 1 }
+      { path: "a.md", words: 0, ctime: 100, mtime: 100, outgoing: 0, incoming: 0 },
+      { path: "b.md", words: 20, ctime: 200, mtime: 200, outgoing: 2, incoming: 1 }
     ], ["a.png", "b.pdf", "c.canvas"], ["one", "two"], 200, 1, 10);
     expect(result).toMatchObject({ notes: 2, attachments: 3, folders: 2, words: 20, links: 2 });
     expect(result.orphanPaths).toEqual(["a.md"]); expect(result.shortPaths).toEqual(["a.md"]);
+  });
+});
+
+describe("analytics", () => {
+  it("groups recent modifications without inventing edit history", () => {
+    const now = new Date(2026, 8, 23, 12).getTime(); const yesterday = new Date(2026, 8, 22, 8).getTime();
+    expect(aggregateActivity([{ path: "a.md", words: 1, mtime: yesterday }, { path: "b.md", words: 1, mtime: yesterday }], now)).toEqual([{ date: "2026-09-22", count: 2 }]);
+    expect(activityLevel(2, 4)).toBe(3); expect(activityLevel(0, 4)).toBe(0);
+  });
+  it("summarizes top-level folders and root notes", () => {
+    const result = aggregateTopFolders([{ path: "Areas/a.md", words: 10, mtime: 1 }, { path: "Areas/b.md", words: 20, mtime: 1 }, { path: "root.md", words: 5, mtime: 1 }]);
+    expect(result[0]).toMatchObject({ name: "Areas", notes: 2, words: 30 }); expect(result[1]).toMatchObject({ name: "", notes: 1, words: 5 });
+  });
+  it("builds bounded line and area paths", () => {
+    expect(linePathRange([0, 5, 10], 10, 1, 2)).toBe("M 50.00 24.00 L 100.00 0.00");
+    expect(areaPath([0, 10], 10)).toContain("L 100 48 L 0 48 Z");
   });
 });
 
@@ -84,6 +101,10 @@ describe("settings migration", () => {
   });
   it("migrates the removed health component into selected vault stats", () => {
     const migrated = migrateData({ workspace: { blocks: [{ id: "health", componentId: "builtin/note-health", span: 6, params: {} }] } });
-    expect(migrated.version).toBe(2); expect(migrated.workspace.blocks[0]).toMatchObject({ componentId: "builtin/vault-stats", params: { items: ["orphans", "empty", "short"] } });
+    expect(migrated.version).toBe(3); expect(migrated.workspace.blocks[0]).toMatchObject({ componentId: "builtin/vault-stats", params: { items: ["orphans", "empty", "short"] } });
+  });
+  it("removes obsolete graph blocks without disturbing other components", () => {
+    const migrated = migrateData({ workspace: { blocks: [{ id: "graph", componentId: "builtin/graph", span: 12, params: {} }, { id: "keep", componentId: "builtin/trends", span: 6, params: {} }] } });
+    expect(migrated.workspace.blocks.map((block) => block.id)).toEqual(["keep"]);
   });
 });
