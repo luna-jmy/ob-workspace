@@ -24,22 +24,34 @@ jobs:
       - run: npm run build
       - name: Verify tag and manifest version
         run: test "${GITHUB_REF_NAME}" = "$(node -p "require('./manifest.json').version")"
-      - uses: softprops/action-gh-release@v2
-        with:
-          draft: true
-          files: |
-            main.js
-            manifest.json
-            styles.css
-      - name: Publish release after assets are uploaded
+      - name: Create published release before uploading assets
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release edit "${GITHUB_REF_NAME}" --draft=false
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --verify-tag \
+            --title "${GITHUB_REF_NAME}" \
+            --notes "BRAT test release ${GITHUB_REF_NAME}."
+          test "$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${GITHUB_REF_NAME}" --jq .draft)" = "false"
+      - name: Upload release assets sequentially
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${GITHUB_REF_NAME}" main.js
+          gh release upload "${GITHUB_REF_NAME}" manifest.json
+          gh release upload "${GITHUB_REF_NAME}" styles.css
       - name: Verify anonymous BRAT release metadata
         run: |
-          assets="$(curl --fail --silent --show-error \
-            -H 'User-Agent: Obsidian/BRAT-Plugin' \
-            -H 'Accept: application/vnd.github.v3+json' \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${GITHUB_REF_NAME}" \
-            | jq -r '[.assets[].name] | sort | join(",")')"
-          test "${assets}" = "main.js,manifest.json,styles.css"
+          for attempt in {1..12}; do
+            assets="$(curl --fail --silent --show-error \
+              -H 'User-Agent: Obsidian/BRAT-Plugin' \
+              -H 'Accept: application/vnd.github.v3+json' \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${GITHUB_REF_NAME}?cache_bust=${GITHUB_RUN_ID}-${attempt}" \
+              | jq -r '[.assets[].name] | sort | join(",")')"
+            if test "${assets}" = "main.js,manifest.json,styles.css"; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "BRAT release metadata did not expose all assets: ${assets}" >&2
+          exit 1
