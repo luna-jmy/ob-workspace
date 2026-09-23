@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.6
+
+- Publish GitHub releases only after BRAT's required assets have finished uploading.
+- Verify release metadata through the same anonymous GitHub API path used by BRAT.
+
 ## 0.1.5
 
 - Prefer valid frontmatter `created` values for new-note heatmap dates, falling back to filesystem creation time only when needed.
