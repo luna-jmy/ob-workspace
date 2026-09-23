@@ -1,0 +1,8 @@
+node_modules/
+.DS_Store
+*.log
+.eslintcache
+coverage/
+release/
+AGENTS.md
+SPEC.md

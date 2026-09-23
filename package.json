@@ -1,0 +1,26 @@
+{
+  "name": "custom-workspace",
+  "version": "0.1.0",
+  "description": "An immediately useful, locally rendered Obsidian workspace.",
+  "main": "main.js",
+  "scripts": {
+    "build": "node esbuild.config.mjs production",
+    "dev": "node esbuild.config.mjs",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --max-warnings 2 && node scripts/check-i18n.mjs",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@eslint/js": "latest",
+    "@types/node": "latest",
+    "esbuild": "latest",
+    "eslint": "latest",
+    "eslint-plugin-obsidianmd": "latest",
+    "jiti": "latest",
+    "obsidian": "1.8.7",
+    "tslib": "latest",
+    "typescript": "5.9.3",
+    "typescript-eslint": "latest",
+    "vitest": "latest"
+  }
+}
