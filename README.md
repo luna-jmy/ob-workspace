@@ -8,6 +8,8 @@ Enable the plugin, then use the ribbon icon or **Open workspace** command. Choos
 
 The plugin does not use the network, telemetry, accounts, or automatic updates. Native components do not require other plugins. Tasks are read-only: selecting one opens its source line.
 
+Quick Jump can combine folder, tag, and frontmatter key/value filters. The writing heatmap groups notes by creation date and can display either new-note counts or the current readable word total of notes created on each day; it does not claim to reconstruct historical writing volume.
+
 ## Optional integrations
 
 - Dataview runs only the code in a Dataview query component, through Dataview's API.

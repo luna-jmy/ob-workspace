@@ -6,7 +6,9 @@ import { parseScriptMetadata, renderFilenamePattern, withParamDefaults } from ".
 import { cycleSpan, moveBlock, moveBlockTo } from "../src/workspace/layout";
 import { estimateHistory, upsertSnapshot } from "../src/history/history";
 import { DEFAULT_DATA, mergeSettings, migrateData, type Block } from "../src/types";
-import { activityLevel, aggregateActivity, aggregateTopFolders, areaPath, linePathRange } from "../src/metrics/analytics";
+import { activityLevel, aggregateHeatmap, aggregateTopFolders, areaPath, linePathRange } from "../src/metrics/analytics";
+import { svgClasses } from "../src/ui/classes";
+import { filterNotePaths, matchesNoteFilter } from "../src/metrics/note-filter";
 
 describe("markdown text metrics", () => {
   it("removes metadata, code, comments and URL targets", () => {
@@ -29,18 +31,42 @@ describe("metric aggregation", () => {
 });
 
 describe("analytics", () => {
-  it("groups recent modifications without inventing edit history", () => {
+  it("groups note counts and current words by creation date", () => {
     const now = new Date(2026, 8, 23, 12).getTime(); const yesterday = new Date(2026, 8, 22, 8).getTime();
-    expect(aggregateActivity([{ path: "a.md", words: 1, mtime: yesterday }, { path: "b.md", words: 1, mtime: yesterday }], now)).toEqual([{ date: "2026-09-22", count: 2 }]);
+    expect(aggregateHeatmap([{ path: "a.md", words: 10, ctime: yesterday, mtime: now }, { path: "b.md", words: 5, ctime: yesterday, mtime: now }], now)).toEqual([{ date: "2026-09-22", notes: 2, words: 15 }]);
     expect(activityLevel(2, 4)).toBe(3); expect(activityLevel(0, 4)).toBe(0);
   });
   it("summarizes top-level folders and root notes", () => {
-    const result = aggregateTopFolders([{ path: "Areas/a.md", words: 10, mtime: 1 }, { path: "Areas/b.md", words: 20, mtime: 1 }, { path: "root.md", words: 5, mtime: 1 }]);
+    const result = aggregateTopFolders([{ path: "Areas/a.md", words: 10, ctime: 1, mtime: 1 }, { path: "Areas/b.md", words: 20, ctime: 1, mtime: 1 }, { path: "root.md", words: 5, ctime: 1, mtime: 1 }]);
     expect(result[0]).toMatchObject({ name: "Areas", notes: 2, words: 30 }); expect(result[1]).toMatchObject({ name: "", notes: 1, words: 5 });
   });
   it("builds bounded line and area paths", () => {
     expect(linePathRange([0, 5, 10], 10, 1, 2)).toBe("M 50.00 24.00 L 100.00 0.00");
     expect(areaPath([0, 10], 10)).toContain("L 100 48 L 0 48 Z");
+  });
+});
+
+describe("quick-jump filters", () => {
+  const note = { path: "300 Resources/example.md", tags: ["#reading", "#topic/ai"], frontmatter: { status: "active", owner: ["Luna", "Team"], nested: { stage: 2 } } };
+  it("matches folder and tags with or without a hash", () => {
+    expect(matchesNoteFilter(note, { folder: "300 Resources", tag: "reading" })).toBe(true);
+    expect(matchesNoteFilter(note, { tag: "#missing" })).toBe(false);
+  });
+  it("matches scalar, array, and dotted frontmatter values", () => {
+    expect(matchesNoteFilter(note, { frontmatterKey: "status", frontmatterValue: "ACTIVE" })).toBe(true);
+    expect(matchesNoteFilter(note, { frontmatterKey: "owner", frontmatterValue: "Luna" })).toBe(true);
+    expect(matchesNoteFilter(note, { frontmatterKey: "nested.stage", frontmatterValue: "2" })).toBe(true);
+  });
+  it("searches drill-down paths case-insensitively", () => {
+    expect(filterNotePaths(["Areas/Alpha.md", "Books/Beta.md"], " alpha ")).toEqual(["Areas/Alpha.md"]);
+    expect(filterNotePaths(["Areas/Alpha.md"], "")).toEqual(["Areas/Alpha.md"]);
+  });
+});
+
+describe("DOM class tokens", () => {
+  it("passes SVG classes as separate DOMTokenList entries", () => {
+    expect(svgClasses("cw-link-chart__line", "is-estimated")).toEqual(["cw-link-chart__line", "is-estimated"]);
+    expect(svgClasses("cw-link-chart__line", "is-estimated").every((token) => !token.includes(" "))).toBe(true);
   });
 });
 

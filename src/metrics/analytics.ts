@@ -1,6 +1,6 @@
-export interface ActivityDay { date: string; count: number }
+export interface HeatmapDay { date: string; notes: number; words: number }
 export interface FolderMetric { name: string; notes: number; words: number; paths: string[] }
-export interface AnalyticsNote { path: string; words: number; mtime: number }
+export interface AnalyticsNote { path: string; words: number; ctime: number; mtime: number }
 
 function localDateKey(timestamp: number): string {
   const date = new Date(timestamp);
@@ -10,15 +10,16 @@ function localDateKey(timestamp: number): string {
   return `${year}-${month}-${day}`;
 }
 
-export function aggregateActivity(notes: AnalyticsNote[], now: number, days = 365): ActivityDay[] {
+export function aggregateHeatmap(notes: AnalyticsNote[], now: number, days = 365): HeatmapDay[] {
   const start = new Date(now); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() - Math.max(0, days - 1));
   const end = new Date(now); end.setHours(23, 59, 59, 999);
-  const counts = new Map<string, number>();
+  const values = new Map<string, HeatmapDay>();
   for (const note of notes) {
-    if (note.mtime < start.getTime() || note.mtime > end.getTime()) continue;
-    const date = localDateKey(note.mtime); counts.set(date, (counts.get(date) ?? 0) + 1);
+    if (note.ctime < start.getTime() || note.ctime > end.getTime()) continue;
+    const date = localDateKey(note.ctime); const day = values.get(date) ?? { date, notes: 0, words: 0 };
+    day.notes += 1; day.words += note.words; values.set(date, day);
   }
-  return [...counts.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, count]) => ({ date, count }));
+  return [...values.values()].sort((a, b) => a.date.localeCompare(b.date));
 }
 
 export function aggregateTopFolders(notes: AnalyticsNote[]): FolderMetric[] {

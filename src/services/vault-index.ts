@@ -1,7 +1,8 @@
 import type { App, TAbstractFile } from "obsidian";
-import { TFile } from "obsidian";
+import { getAllTags, TFile } from "obsidian";
 import { countReadableWords } from "../metrics/text";
 import { aggregateMetrics, type VaultMetrics } from "../metrics/aggregate";
+import { matchesNoteFilter, type NoteFilter } from "../metrics/note-filter";
 
 export class VaultIndex {
   private metricsPromise?: Promise<VaultMetrics>;
@@ -26,8 +27,12 @@ export class VaultIndex {
     const folderPaths = [...new Set(files.map((file) => file.parent?.path).filter((path): path is string => Boolean(path)))];
     return aggregateMetrics(notes, attachmentPaths, folderPaths, Date.now(), this.recentDays(), this.threshold());
   }
-  recentNotes(limit: number, folder = ""): TFile[] {
-    return this.app.vault.getMarkdownFiles().filter((file) => this.included(file.path) && (!folder || file.path.startsWith(`${folder}/`)))
+  recentNotes(limit: number, filter: NoteFilter = {}): TFile[] {
+    return this.app.vault.getMarkdownFiles().filter((file) => {
+      if (!this.included(file.path)) return false;
+      const cache = this.app.metadataCache.getFileCache(file);
+      return matchesNoteFilter({ path: file.path, tags: cache ? getAllTags(cache) ?? [] : [], frontmatter: cache?.frontmatter }, filter);
+    })
       .sort((a, b) => b.stat.mtime - a.stat.mtime).slice(0, limit);
   }
   find(path: string): TFile | null { const file: TAbstractFile | null = this.app.vault.getAbstractFileByPath(path); return file instanceof TFile ? file : null; }

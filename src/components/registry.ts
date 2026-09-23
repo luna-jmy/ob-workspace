@@ -8,6 +8,7 @@ import { runScript } from "../services/script-runner";
 import { moment } from "../services/date";
 import { DetailModal } from "../ui/detail-modal";
 import { activityLevel, areaPath, linePathRange } from "../metrics/analytics";
+import { svgClasses } from "../ui/classes";
 
 function paramString(value: ParamValue | undefined, fallback = ""): string {
   return typeof value === "string" || typeof value === "number" || typeof value === "boolean" ? String(value) : fallback;
@@ -61,10 +62,15 @@ const vaultStats: ComponentDefinition = {
 
 const quickJump: ComponentDefinition = {
   id: "builtin/quick-jump", name: "快速跳转", icon: "files", description: "", params: [
-    { key: "limit", type: "number", defaultValue: 8 }, { key: "folder", type: "folder", defaultValue: "" }
+    { key: "limit", type: "number", defaultValue: 8 }, { key: "folder", type: "folder", defaultValue: "" },
+    { key: "tag", type: "tag", defaultValue: "" }, { key: "frontmatterKey", type: "text", defaultValue: "" },
+    { key: "frontmatterValue", type: "text", defaultValue: "" }
   ],
   async render(container, block, _host, plugin) {
-    const files = plugin.index.recentNotes(paramNumber(block.params.limit, 8), paramString(block.params.folder));
+    const files = plugin.index.recentNotes(paramNumber(block.params.limit, 8), {
+      folder: paramString(block.params.folder), tag: paramString(block.params.tag),
+      frontmatterKey: paramString(block.params.frontmatterKey), frontmatterValue: paramString(block.params.frontmatterValue)
+    });
     if (!files.length) { container.createDiv({ text: t("暂无内容"), cls: "cw-empty" }); return; }
     for (const file of files) {
       const button = container.createEl("button", { cls: "cw-note-link" });
@@ -149,22 +155,25 @@ const wordsTrend: ComponentDefinition = {
 };
 
 const activityHeatmap: ComponentDefinition = {
-  id: "builtin/activity-heatmap", name: "写作热力图", icon: "calendar-days", description: "", params: [],
-  async render(container, _block, _host, plugin) {
-    const data = await plugin.index.metrics(); const counts = new Map(data.activity.map((day) => [day.date, day.count]));
-    const maximum = Math.max(0, ...data.activity.map((day) => day.count)); const total = data.activity.reduce((sum, day) => sum + day.count, 0);
+  id: "builtin/activity-heatmap", name: "写作热力图", icon: "calendar-days", description: "", params: [{ key: "metric", type: "select:字数,新增笔记数", defaultValue: "字数" }],
+  async render(container, block, _host, plugin) {
+    const data = await plugin.index.metrics(); const useNotes = paramString(block.params.metric, "字数") === "新增笔记数";
+    const values = new Map(data.heatmap.map((day) => [day.date, useNotes ? day.notes : day.words]));
+    const maximum = Math.max(0, ...values.values()); const total = [...values.values()].reduce((sum, value) => sum + value, 0);
     const summary = container.createDiv({ cls: "cw-analytics-summary" });
-    summary.createSpan({ text: t("过去 12 个月") }); summary.createSpan({ text: `${total.toLocaleString()} ${t("篇笔记")}` });
-    const grid = container.createDiv({ cls: "cw-heatmap", attr: { role: "img", "aria-label": t("按笔记最后修改日期统计") } });
+    summary.createSpan({ text: t("过去 12 个月") }); summary.createSpan({ text: `${total.toLocaleString()} ${useNotes ? t("篇笔记") : t("字")}` });
+    const explanation = useNotes ? t("按笔记创建日期统计新增笔记") : t("按笔记创建日期归组当前字数");
+    const unit = useNotes ? t("篇") : t("字");
+    const grid = container.createDiv({ cls: "cw-heatmap", attr: { role: "img", "aria-label": explanation } });
     const end = moment().startOf("day"); const start = end.clone().subtract(364, "days");
     for (let index = 0; index < start.day(); index += 1) grid.createSpan({ cls: "cw-heatmap__blank", attr: { "aria-hidden": "true" } });
     for (let index = 0; index < 365; index += 1) {
-      const date = start.clone().add(index, "days").format("YYYY-MM-DD"); const count = counts.get(date) ?? 0;
-      grid.createSpan({ cls: `cw-heatmap__day cw-heatmap__day--${activityLevel(count, maximum)}`, attr: { title: `${date}: ${count}`, "aria-label": `${date}: ${count}` } });
+      const date = start.clone().add(index, "days").format("YYYY-MM-DD"); const count = values.get(date) ?? 0;
+      grid.createSpan({ cls: `cw-heatmap__day cw-heatmap__day--${activityLevel(count, maximum)}`, attr: { title: `${date}: ${count.toLocaleString()} ${unit}`, "aria-label": `${date}: ${count.toLocaleString()} ${unit}` } });
     }
     const footer = container.createDiv({ cls: "cw-heatmap-legend" }); footer.createSpan({ text: t("少") });
     for (let level = 1; level <= 5; level += 1) footer.createSpan({ cls: `cw-heatmap__day cw-heatmap__day--${level}`, attr: { "aria-hidden": "true" } });
-    footer.createSpan({ text: t("多") }); container.createDiv({ text: t("按笔记最后修改日期统计"), cls: "cw-analytics-note" });
+    footer.createSpan({ text: t("多") }); container.createDiv({ text: explanation, cls: "cw-analytics-note" });
   }
 };
 
@@ -186,7 +195,7 @@ const linkTrend: ComponentDefinition = {
     svg.createSvg("line", { cls: "cw-link-chart__grid", attr: { x1: "0", y1: "48", x2: "100", y2: "48" } });
     svg.createSvg("path", { cls: "cw-link-chart__area", attr: { d: areaPath(values, maximum) } });
     let lastEstimated = -1; history.forEach((point, index) => { if (point.estimated) lastEstimated = index; });
-    if (lastEstimated >= 0) svg.createSvg("path", { cls: "cw-link-chart__line is-estimated", attr: { d: linePathRange(values, maximum, 0, lastEstimated) } });
+    if (lastEstimated >= 0) svg.createSvg("path", { cls: svgClasses("cw-link-chart__line", "is-estimated"), attr: { d: linePathRange(values, maximum, 0, lastEstimated) } });
     const actualStart = Math.max(0, history.findIndex((point) => !point.estimated) - 1);
     if (history.some((point) => !point.estimated)) svg.createSvg("path", { cls: "cw-link-chart__line", attr: { d: linePathRange(values, maximum, actualStart, history.length - 1) } });
     svg.createSvg("circle", { cls: "cw-link-chart__point", attr: { cx: "100", cy: String(48 - last.links / maximum * 48), r: "1.2" } });
@@ -242,12 +251,17 @@ export function scriptDefinition(filename: string, name: string, icon: string, d
 }
 
 export function addParamSetting(parent: HTMLElement, definition: ParamDefinition, block: Block, onChange: () => Promise<void>): void {
-  const setting = new Setting(parent).setName(definition.key);
+  const labels: Record<string, string> = {
+    limit: t("显示条数"), folder: t("目录"), tag: t("标签"), frontmatterKey: t("Frontmatter 属性名"),
+    frontmatterValue: t("Frontmatter 属性值"), metric: t("统计方式"), range: t("统计范围")
+  };
+  const optionLabels: Record<string, string> = { "字数": t("字数"), "新增笔记数": t("新增笔记数") };
+  const setting = new Setting(parent).setName(labels[definition.key] ?? definition.key);
   const value = block.params[definition.key] ?? definition.defaultValue;
   if (definition.type === "boolean") setting.addToggle((toggle) => toggle.setValue(Boolean(value)).onChange(async (next) => { block.params[definition.key] = next; await onChange(); }));
   else if (definition.type === "number") setting.addText((text) => text.setValue(paramString(value, "0")).onChange(async (next) => { const parsed = Number(next); if (Number.isFinite(parsed)) { block.params[definition.key] = parsed; await onChange(); } }));
   else if (definition.type.startsWith("select:")) setting.addDropdown((dropdown) => {
-    for (const option of definition.type.slice(7).split(",")) dropdown.addOption(option, option);
+    for (const option of definition.type.slice(7).split(",")) dropdown.addOption(option, optionLabels[option] ?? option);
     dropdown.setValue(paramString(value)).onChange(async (next) => { block.params[definition.key] = next; await onChange(); });
   });
   else setting.addText((text) => text.setValue(paramString(value)).setPlaceholder(t("请输入值")).onChange(async (next) => { block.params[definition.key] = next; await onChange(); }));

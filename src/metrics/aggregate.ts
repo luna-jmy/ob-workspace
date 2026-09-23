@@ -1,11 +1,11 @@
-import { aggregateActivity, aggregateTopFolders, type ActivityDay, type FolderMetric } from "./analytics";
+import { aggregateHeatmap, aggregateTopFolders, type FolderMetric, type HeatmapDay } from "./analytics";
 
 export interface NoteMetricInput { path: string; words: number; ctime: number; mtime: number; outgoing: number; incoming: number }
 export interface VaultMetrics {
   notes: number; attachments: number; folders: number; recent: number; words: number; links: number;
   notePaths: string[]; attachmentPaths: string[]; folderPaths: string[]; recentPaths: string[]; linkedPaths: string[];
   orphanPaths: string[]; emptyPaths: string[]; shortPaths: string[];
-  activity: ActivityDay[]; topFolders: FolderMetric[];
+  heatmap: HeatmapDay[]; topFolders: FolderMetric[];
 }
 
 export function aggregateMetrics(notes: NoteMetricInput[], attachmentPaths: string[], folderPaths: string[], now: number, recentDays: number, shortThreshold: number): VaultMetrics {
@@ -21,6 +21,6 @@ export function aggregateMetrics(notes: NoteMetricInput[], attachmentPaths: stri
     orphanPaths: notes.filter((note) => note.outgoing === 0 && note.incoming === 0).map((note) => note.path),
     emptyPaths: notes.filter((note) => note.words === 0).map((note) => note.path),
     shortPaths: notes.filter((note) => note.words <= shortThreshold).map((note) => note.path),
-    activity: aggregateActivity(notes, now), topFolders: aggregateTopFolders(notes)
+    heatmap: aggregateHeatmap(notes, now), topFolders: aggregateTopFolders(notes)
   };
 }
