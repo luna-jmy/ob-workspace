@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.3
+
+- Remove the graph component and migrate existing graph cards out of saved workspaces.
+- Add a 365-day writing heatmap based on each Markdown note's latest modification date.
+- Add an internal-link history chart with clearly distinguished estimated history.
+- Add top-level folder analysis with note counts, readable word counts, proportional bars, and note drill-down.
+
 ## 0.1.2
 
 - Wrap long task text correctly at narrow component widths.

@@ -42,7 +42,9 @@ var en = {
   "\u5FEB\u901F\u8DF3\u8F6C": "Quick jump",
   "\u547D\u4EE4\u6309\u94AE": "Command buttons",
   "\u5B57\u6570\u4E0E\u8D8B\u52BF": "Words & trends",
-  "\u77E5\u8BC6\u56FE\u8C31": "Graph",
+  "\u5199\u4F5C\u70ED\u529B\u56FE": "Writing heatmap",
+  "\u53CC\u94FE\u7EDF\u8BA1\u56FE": "Internal link trend",
+  "\u77E5\u8BC6\u5E93\u7ED3\u6784\u5206\u6790": "Knowledge base structure",
   "\u5FEB\u901F\u65B0\u5EFA": "Quick create",
   "Base \u89C6\u56FE": "Base view",
   "Dataview \u67E5\u8BE2": "Dataview query",
@@ -55,6 +57,18 @@ var en = {
   "\u5B64\u7ACB\u7B14\u8BB0": "Orphan notes",
   "\u7A7A\u7B14\u8BB0": "Empty notes",
   "\u77ED\u7B14\u8BB0": "Short notes",
+  "\u8FC7\u53BB 12 \u4E2A\u6708": "Past 12 months",
+  "\u7BC7\u7B14\u8BB0": "notes",
+  "\u6309\u7B14\u8BB0\u6700\u540E\u4FEE\u6539\u65E5\u671F\u7EDF\u8BA1": "Based on each note's latest modification date",
+  "\u5C11": "Less",
+  "\u591A": "More",
+  "\u5929": "days",
+  "\u5DF2\u89E3\u6790\u5185\u90E8\u94FE\u63A5\u603B\u91CF": "Total resolved internal links",
+  "\u865A\u7EBF\u4E3A\u6309\u7B14\u8BB0\u521B\u5EFA\u65E5\u671F\u4F30\u7B97\u7684\u5386\u53F2": "The dashed segment is historical data estimated from note creation dates",
+  "\u6309\u4E00\u7EA7\u76EE\u5F55\u7EDF\u8BA1 Markdown \u7B14\u8BB0": "Markdown notes grouped by top-level folder",
+  "\u6839\u76EE\u5F55": "Vault root",
+  "\u7BC7": "notes",
+  "\u5B57": "words",
   "\u4ECA\u5929": "Today",
   "\u9057\u7559": "Overdue",
   "\u6700\u8FD1\u5B8C\u6210": "Recently completed",
@@ -112,7 +126,6 @@ var en = {
   "\u5C1A\u65E0\u547D\u4EE4\u6309\u94AE\uFF0C\u8BF7\u5728\u7F16\u8F91\u6A21\u5F0F\u914D\u7F6E\u3002": "No command buttons yet. Configure them in edit mode.",
   "\u6253\u5F00": "Open",
   "\u7EC4\u4EF6\u4E0D\u53EF\u7528": "Component unavailable",
-  "Obsidian \u6682\u672A\u63D0\u4F9B\u5D4C\u5165\u539F\u751F\u56FE\u8C31\u7684\u516C\u5F00\u63A5\u53E3": "Obsidian does not currently expose a public API for embedding the native graph",
   "\u4EC5\u663E\u793A\u524D 500 \u9879": "Showing the first 500 items only",
   "\u5173\u95ED": "Close",
   "\u672A\u77E5\u7EC4\u4EF6": "Unknown component",
@@ -299,6 +312,69 @@ var DetailModal = class extends import_obsidian3.Modal {
   }
 };
 
+// src/metrics/analytics.ts
+function localDateKey(timestamp) {
+  const date = new Date(timestamp);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+function aggregateActivity(notes, now, days = 365) {
+  var _a;
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - Math.max(0, days - 1));
+  const end = new Date(now);
+  end.setHours(23, 59, 59, 999);
+  const counts = /* @__PURE__ */ new Map();
+  for (const note of notes) {
+    if (note.mtime < start.getTime() || note.mtime > end.getTime()) continue;
+    const date = localDateKey(note.mtime);
+    counts.set(date, ((_a = counts.get(date)) != null ? _a : 0) + 1);
+  }
+  return [...counts.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, count]) => ({ date, count }));
+}
+function aggregateTopFolders(notes) {
+  var _a;
+  const folders = /* @__PURE__ */ new Map();
+  for (const note of notes) {
+    const slash = note.path.indexOf("/");
+    const name = slash < 0 ? "" : note.path.slice(0, slash);
+    const metric2 = (_a = folders.get(name)) != null ? _a : { name, notes: 0, words: 0, paths: [] };
+    metric2.notes += 1;
+    metric2.words += note.words;
+    metric2.paths.push(note.path);
+    folders.set(name, metric2);
+  }
+  return [...folders.values()].sort((a, b) => b.notes - a.notes || b.words - a.words || a.name.localeCompare(b.name));
+}
+function activityLevel(count, maximum) {
+  if (count <= 0 || maximum <= 0) return 0;
+  return Math.min(5, Math.max(1, Math.ceil(count / maximum * 5)));
+}
+function linePath(values, maximum, width = 100, height = 48) {
+  if (!values.length) return "";
+  const denominator = Math.max(1, values.length - 1);
+  const ceiling = Math.max(1, maximum);
+  return values.map((value, index) => `${index ? "L" : "M"} ${(index / denominator * width).toFixed(2)} ${(height - value / ceiling * height).toFixed(2)}`).join(" ");
+}
+function linePathRange(values, maximum, from, to, width = 100, height = 48) {
+  if (!values.length || from < 0 || to < from || from >= values.length) return "";
+  const last = Math.min(to, values.length - 1);
+  const denominator = Math.max(1, values.length - 1);
+  const ceiling = Math.max(1, maximum);
+  const commands = [];
+  for (let index = from; index <= last; index += 1) {
+    commands.push(`${index === from ? "M" : "L"} ${(index / denominator * width).toFixed(2)} ${(height - values[index] / ceiling * height).toFixed(2)}`);
+  }
+  return commands.join(" ");
+}
+function areaPath(values, maximum, width = 100, height = 48) {
+  const line = linePath(values, maximum, width, height);
+  return line ? `${line} L ${width} ${height} L 0 ${height} Z` : "";
+}
+
 // src/components/registry.ts
 function paramString(value, fallback = "") {
   return typeof value === "string" || typeof value === "number" || typeof value === "boolean" ? String(value) : fallback;
@@ -411,16 +487,6 @@ var commandButtons = {
     }
   }
 };
-var graph = {
-  id: "builtin/graph",
-  name: "\u77E5\u8BC6\u56FE\u8C31",
-  icon: "git-fork",
-  description: "",
-  params: [],
-  async render(container) {
-    unavailable(container, t("Obsidian \u6682\u672A\u63D0\u4F9B\u5D4C\u5165\u539F\u751F\u56FE\u8C31\u7684\u516C\u5F00\u63A5\u53E3"));
-  }
-};
 var templater = {
   id: "builtin/quick-create",
   name: "\u5FEB\u901F\u65B0\u5EFA",
@@ -514,6 +580,116 @@ var wordsTrend = {
     xAxis.createSpan({ text: points[points.length - 1].date.slice(5) });
   }
 };
+var activityHeatmap = {
+  id: "builtin/activity-heatmap",
+  name: "\u5199\u4F5C\u70ED\u529B\u56FE",
+  icon: "calendar-days",
+  description: "",
+  params: [],
+  async render(container, _block, _host, plugin) {
+    var _a;
+    const data = await plugin.index.metrics();
+    const counts = new Map(data.activity.map((day) => [day.date, day.count]));
+    const maximum = Math.max(0, ...data.activity.map((day) => day.count));
+    const total = data.activity.reduce((sum, day) => sum + day.count, 0);
+    const summary = container.createDiv({ cls: "cw-analytics-summary" });
+    summary.createSpan({ text: t("\u8FC7\u53BB 12 \u4E2A\u6708") });
+    summary.createSpan({ text: `${total.toLocaleString()} ${t("\u7BC7\u7B14\u8BB0")}` });
+    const grid = container.createDiv({ cls: "cw-heatmap", attr: { role: "img", "aria-label": t("\u6309\u7B14\u8BB0\u6700\u540E\u4FEE\u6539\u65E5\u671F\u7EDF\u8BA1") } });
+    const end = moment().startOf("day");
+    const start = end.clone().subtract(364, "days");
+    for (let index = 0; index < start.day(); index += 1) grid.createSpan({ cls: "cw-heatmap__blank", attr: { "aria-hidden": "true" } });
+    for (let index = 0; index < 365; index += 1) {
+      const date = start.clone().add(index, "days").format("YYYY-MM-DD");
+      const count = (_a = counts.get(date)) != null ? _a : 0;
+      grid.createSpan({ cls: `cw-heatmap__day cw-heatmap__day--${activityLevel(count, maximum)}`, attr: { title: `${date}: ${count}`, "aria-label": `${date}: ${count}` } });
+    }
+    const footer = container.createDiv({ cls: "cw-heatmap-legend" });
+    footer.createSpan({ text: t("\u5C11") });
+    for (let level = 1; level <= 5; level += 1) footer.createSpan({ cls: `cw-heatmap__day cw-heatmap__day--${level}`, attr: { "aria-hidden": "true" } });
+    footer.createSpan({ text: t("\u591A") });
+    container.createDiv({ text: t("\u6309\u7B14\u8BB0\u6700\u540E\u4FEE\u6539\u65E5\u671F\u7EDF\u8BA1"), cls: "cw-analytics-note" });
+  }
+};
+var linkTrend = {
+  id: "builtin/link-trend",
+  name: "\u53CC\u94FE\u7EDF\u8BA1\u56FE",
+  icon: "link-2",
+  description: "",
+  params: [{ key: "range", type: "select:90,180,365", defaultValue: "365" }],
+  async render(container, block, _host, plugin) {
+    const metrics = await plugin.index.metrics();
+    await plugin.recordHistory(metrics);
+    const range = Math.max(1, paramNumber(block.params.range, 365));
+    const history = (plugin.config.showEstimatedHistory ? plugin.data.history : plugin.data.history.filter((point) => !point.estimated)).slice(-range);
+    if (!history.length) {
+      container.createDiv({ text: t("\u6682\u65E0\u5185\u5BB9"), cls: "cw-empty" });
+      return;
+    }
+    const values = history.map((point) => point.links);
+    const maximum = Math.max(1, ...values);
+    const last = history[history.length - 1];
+    const summary = container.createDiv({ cls: "cw-analytics-summary" });
+    summary.createSpan({ text: `${range} ${t("\u5929")}` });
+    summary.createSpan({ text: last.links.toLocaleString() });
+    const frame = container.createDiv({ cls: "cw-link-chart-frame" });
+    const yAxis = frame.createDiv({ cls: "cw-link-chart-y" });
+    yAxis.createSpan({ text: maximum.toLocaleString() });
+    yAxis.createSpan({ text: Math.round(maximum / 2).toLocaleString() });
+    yAxis.createSpan({ text: "0" });
+    const plot = frame.createDiv({ cls: "cw-link-chart-plot" });
+    const svg = plot.createSvg("svg", { cls: "cw-link-chart", attr: { viewBox: "0 0 100 48", preserveAspectRatio: "none", role: "img", "aria-label": t("\u5DF2\u89E3\u6790\u5185\u90E8\u94FE\u63A5\u603B\u91CF") } });
+    svg.createSvg("line", { cls: "cw-link-chart__grid", attr: { x1: "0", y1: "0", x2: "100", y2: "0" } });
+    svg.createSvg("line", { cls: "cw-link-chart__grid", attr: { x1: "0", y1: "24", x2: "100", y2: "24" } });
+    svg.createSvg("line", { cls: "cw-link-chart__grid", attr: { x1: "0", y1: "48", x2: "100", y2: "48" } });
+    svg.createSvg("path", { cls: "cw-link-chart__area", attr: { d: areaPath(values, maximum) } });
+    let lastEstimated = -1;
+    history.forEach((point, index) => {
+      if (point.estimated) lastEstimated = index;
+    });
+    if (lastEstimated >= 0) svg.createSvg("path", { cls: "cw-link-chart__line is-estimated", attr: { d: linePathRange(values, maximum, 0, lastEstimated) } });
+    const actualStart = Math.max(0, history.findIndex((point) => !point.estimated) - 1);
+    if (history.some((point) => !point.estimated)) svg.createSvg("path", { cls: "cw-link-chart__line", attr: { d: linePathRange(values, maximum, actualStart, history.length - 1) } });
+    svg.createSvg("circle", { cls: "cw-link-chart__point", attr: { cx: "100", cy: String(48 - last.links / maximum * 48), r: "1.2" } });
+    const xAxis = plot.createDiv({ cls: "cw-link-chart-x" });
+    xAxis.createSpan({ text: history[0].date.slice(5) });
+    xAxis.createSpan({ text: last.date.slice(5) });
+    if (history.some((point) => point.estimated)) container.createDiv({ text: t("\u865A\u7EBF\u4E3A\u6309\u7B14\u8BB0\u521B\u5EFA\u65E5\u671F\u4F30\u7B97\u7684\u5386\u53F2"), cls: "cw-analytics-note" });
+  }
+};
+var structureAnalysis = {
+  id: "builtin/structure",
+  name: "\u77E5\u8BC6\u5E93\u7ED3\u6784\u5206\u6790",
+  icon: "folders",
+  description: "",
+  params: [],
+  async render(container, _block, host, plugin) {
+    const data = await plugin.index.metrics();
+    if (!data.topFolders.length) {
+      container.createDiv({ text: t("\u6682\u65E0\u5185\u5BB9"), cls: "cw-empty" });
+      return;
+    }
+    container.createDiv({ text: t("\u6309\u4E00\u7EA7\u76EE\u5F55\u7EDF\u8BA1 Markdown \u7B14\u8BB0"), cls: "cw-analytics-note cw-analytics-note--top" });
+    const maximum = Math.max(1, ...data.topFolders.map((folder) => folder.notes));
+    const grid = container.createDiv({ cls: "cw-structure" });
+    for (const folder of data.topFolders) {
+      const label = folder.name || t("\u6839\u76EE\u5F55");
+      const row = grid.createEl("button", { cls: "cw-structure__row", attr: { "aria-label": `${label}: ${folder.notes} ${t("\u7BC7")}` } });
+      (0, import_obsidian4.setIcon)(row.createSpan({ cls: "cw-structure__icon" }), "folder");
+      const content = row.createSpan({ cls: "cw-structure__content" });
+      const heading = content.createSpan({ cls: "cw-structure__heading" });
+      heading.createSpan({ text: label, cls: "cw-structure__name" });
+      const figures = heading.createSpan({ cls: "cw-structure__figures" });
+      figures.createSpan({ text: `${folder.notes.toLocaleString()} ${t("\u7BC7")}` });
+      figures.createSpan({ text: `${new Intl.NumberFormat(void 0, { notation: "compact", maximumFractionDigits: 1 }).format(folder.words)} ${t("\u5B57")}` });
+      const track = content.createSpan({ cls: "cw-structure__track" });
+      const bar = track.createSpan({ cls: "cw-structure__bar" });
+      bar.style.setProperty("--cw-structure-width", `${folder.notes / maximum * 100}%`);
+      (0, import_obsidian4.setIcon)(row.createSpan({ cls: "cw-structure__chevron" }), "chevron-right");
+      host.registerDomEvent(row, "click", () => new DetailModal(plugin.app, label, folder.paths, plugin).open());
+    }
+  }
+};
 var todayTasks = {
   id: "builtin/today-tasks",
   name: "\u4ECA\u65E5\u4EFB\u52A1",
@@ -524,7 +700,7 @@ var todayTasks = {
     await plugin.renderTasks(container, host);
   }
 };
-var BUILTINS = [vaultStats, todayTasks, quickJump, commandButtons, wordsTrend, graph, templater, baseView, dataview];
+var BUILTINS = [vaultStats, todayTasks, quickJump, commandButtons, wordsTrend, activityHeatmap, linkTrend, structureAnalysis, templater, baseView, dataview];
 function builtinDefinitions() {
   return BUILTINS;
 }
@@ -539,7 +715,9 @@ function componentName(definition) {
     "builtin/quick-jump": t("\u5FEB\u901F\u8DF3\u8F6C"),
     "builtin/command-buttons": t("\u547D\u4EE4\u6309\u94AE"),
     "builtin/trends": t("\u5B57\u6570\u4E0E\u8D8B\u52BF"),
-    "builtin/graph": t("\u77E5\u8BC6\u56FE\u8C31"),
+    "builtin/activity-heatmap": t("\u5199\u4F5C\u70ED\u529B\u56FE"),
+    "builtin/link-trend": t("\u53CC\u94FE\u7EDF\u8BA1\u56FE"),
+    "builtin/structure": t("\u77E5\u8BC6\u5E93\u7ED3\u6784\u5206\u6790"),
     "builtin/quick-create": t("\u5FEB\u901F\u65B0\u5EFA"),
     "builtin/base": t("Base \u89C6\u56FE"),
     "builtin/dataview": t("Dataview \u67E5\u8BE2")
@@ -980,7 +1158,7 @@ var DEFAULT_SETTINGS = {
   allowScripts: false
 };
 var DEFAULT_DATA = {
-  version: 2,
+  version: 3,
   settings: DEFAULT_SETTINGS,
   workspace: { blocks: [
     { id: "default-stats", componentId: "builtin/vault-stats", span: 12, params: {} },
@@ -1012,10 +1190,10 @@ function mergeSettings(value) {
 }
 function migrateData(value) {
   if (!isRecord(value)) return structuredClone(DEFAULT_DATA);
-  const workspace = isRecord(value.workspace) && Array.isArray(value.workspace.blocks) ? { blocks: value.workspace.blocks.filter(isBlock).map(migrateBlock) } : structuredClone(DEFAULT_DATA.workspace);
+  const workspace = isRecord(value.workspace) && Array.isArray(value.workspace.blocks) ? { blocks: value.workspace.blocks.filter(isBlock).filter((block) => block.componentId !== "builtin/graph").map(migrateBlock) } : structuredClone(DEFAULT_DATA.workspace);
   const history = Array.isArray(value.history) ? value.history.filter(isSnapshot) : [];
   return {
-    version: 2,
+    version: 3,
     settings: mergeSettings(value.settings),
     workspace,
     history,
@@ -1109,7 +1287,9 @@ function aggregateMetrics(notes, attachmentPaths, folderPaths, now, recentDays, 
     linkedPaths: notes.filter((note) => note.outgoing > 0).map((note) => note.path),
     orphanPaths: notes.filter((note) => note.outgoing === 0 && note.incoming === 0).map((note) => note.path),
     emptyPaths: notes.filter((note) => note.words === 0).map((note) => note.path),
-    shortPaths: notes.filter((note) => note.words <= shortThreshold).map((note) => note.path)
+    shortPaths: notes.filter((note) => note.words <= shortThreshold).map((note) => note.path),
+    activity: aggregateActivity(notes, now),
+    topFolders: aggregateTopFolders(notes)
   };
 }
 
@@ -1143,6 +1323,7 @@ var VaultIndex = class {
       return {
         path: file.path,
         ctime: file.stat.ctime,
+        mtime: file.stat.mtime,
         words: countReadableWords(await this.app.vault.cachedRead(file)),
         outgoing: Object.values((_a2 = resolved[file.path]) != null ? _a2 : {}).reduce((sum, count) => sum + count, 0),
         incoming: (_b = incoming.get(file.path)) != null ? _b : 0
