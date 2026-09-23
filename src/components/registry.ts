@@ -21,15 +21,16 @@ export interface ComponentDefinition {
   render(container: HTMLElement, block: Block, host: Component, plugin: CustomWorkspacePlugin): Promise<void>;
 }
 
-const STAT_KEYS = ["notes", "attachments", "folders", "recent", "words", "links", "orphans", "empty"] as const;
+const STAT_KEYS = ["notes", "attachments", "folders", "recent", "words", "links", "orphans", "empty", "short"] as const;
+const DEFAULT_STAT_KEYS: StatKey[] = ["notes", "attachments", "folders", "recent", "words", "links", "orphans", "empty"];
 export type StatKey = typeof STAT_KEYS[number];
 export const STAT_LABELS: Record<StatKey, string> = {
-  notes: "笔记", attachments: "附件", folders: "文件夹", recent: "最近新增", words: "可读字数", links: "链接", orphans: "孤立笔记", empty: "空笔记"
+  notes: "笔记", attachments: "附件", folders: "文件夹", recent: "最近新增", words: "可读字数", links: "链接", orphans: "孤立笔记", empty: "空笔记", short: "短笔记"
 };
 export function selectedStats(value: ParamValue | undefined): StatKey[] {
-  if (!Array.isArray(value)) return [...STAT_KEYS];
+  if (!Array.isArray(value)) return [...DEFAULT_STAT_KEYS];
   const selected = value.filter((item): item is StatKey => typeof item === "string" && STAT_KEYS.includes(item as StatKey));
-  return selected.length ? selected : [...STAT_KEYS];
+  return selected;
 }
 
 function metric(container: HTMLElement, label: string, value: number, paths: string[], plugin: CustomWorkspacePlugin, host: Component): void {
@@ -53,6 +54,7 @@ const vaultStats: ComponentDefinition = {
     if (selected.includes("links")) metric(grid, t("链接"), data.links, data.linkedPaths, plugin, host);
     if (selected.includes("orphans")) metric(grid, t("孤立笔记"), data.orphanPaths.length, data.orphanPaths, plugin, host);
     if (selected.includes("empty")) metric(grid, t("空笔记"), data.emptyPaths.length, data.emptyPaths, plugin, host);
+    if (selected.includes("short")) metric(grid, t("短笔记"), data.shortPaths.length, data.shortPaths, plugin, host);
   }
 };
 
@@ -92,46 +94,9 @@ const commandButtons: ComponentDefinition = {
   }
 };
 
-const health: ComponentDefinition = {
-  id: "builtin/note-health", name: "笔记健康度", icon: "heart-pulse", description: "", params: [],
-  async render(container, _block, host, plugin) {
-    const data = await plugin.index.metrics(); const grid = container.createDiv({ cls: "cw-metrics" });
-    metric(grid, t("孤立笔记"), data.orphanPaths.length, data.orphanPaths, plugin, host);
-    metric(grid, t("空笔记"), data.emptyPaths.length, data.emptyPaths, plugin, host);
-    metric(grid, t("短笔记"), data.shortPaths.length, data.shortPaths, plugin, host);
-  }
-};
-
 const graph: ComponentDefinition = {
-  id: "builtin/graph", name: "知识图谱", icon: "git-fork", description: "", params: [{ key: "file", type: "note", defaultValue: "" }],
-  async render(container, block, host, plugin) {
-    const resolved = plugin.app.metadataCache.resolvedLinks;
-    const configured = paramString(block.params.file); let active = configured ? plugin.index.find(configured) : plugin.app.workspace.getActiveFile();
-    if (!active) {
-      const degrees = new Map<string, number>();
-      for (const [source, targets] of Object.entries(resolved)) {
-        degrees.set(source, (degrees.get(source) ?? 0) + Object.keys(targets).length);
-        for (const [target, count] of Object.entries(targets)) degrees.set(target, (degrees.get(target) ?? 0) + count);
-      }
-      const rootPath = [...degrees.entries()].sort((a, b) => b[1] - a[1])[0]?.[0]; active = rootPath ? plugin.index.find(rootPath) : null;
-    }
-    if (!active) { unavailable(container, t("仓库里还没有可预览的链接关系")); return; }
-    const outgoing = Object.keys(resolved[active.path] ?? {});
-    const incoming = Object.entries(resolved).filter(([, targets]) => active.path in targets).map(([path]) => path);
-    const paths = [...new Set([...outgoing, ...incoming])].filter((path) => path !== active.path).slice(0, 12);
-    const preview = container.createDiv({ cls: "cw-graph-preview" });
-    const lines = preview.createSvg("svg", { cls: "cw-graph-preview__lines", attr: { viewBox: "0 0 100 100", preserveAspectRatio: "none", "aria-hidden": "true" } });
-    const center = preview.createEl("button", { text: active.basename, cls: "cw-graph-node cw-graph-node--center" });
-    host.registerDomEvent(center, "click", () => void plugin.app.workspace.getLeaf(false).openFile(active));
-    paths.forEach((path, index) => {
-      const angle = index / Math.max(paths.length, 1) * Math.PI * 2 - Math.PI / 2; const x = 50 + Math.cos(angle) * 39; const y = 50 + Math.sin(angle) * 38;
-      lines.createSvg("line", { attr: { x1: "50", y1: "50", x2: String(x), y2: String(y) } });
-      const node = preview.createEl("button", { text: path.split("/").pop()?.replace(/\.md$/i, "") ?? path, cls: "cw-graph-node" });
-      node.style.setProperty("--cw-node-x", `${x}%`); node.style.setProperty("--cw-node-y", `${y}%`);
-      host.registerDomEvent(node, "click", () => { const file = plugin.index.find(path); if (file) void plugin.app.workspace.getLeaf(false).openFile(file); });
-    });
-    if (!paths.length) preview.createDiv({ text: t("当前笔记暂无已解析关系"), cls: "cw-graph-empty" });
-  }
+  id: "builtin/graph", name: "知识图谱", icon: "git-fork", description: "", params: [],
+  async render(container) { unavailable(container, t("Obsidian 暂未提供嵌入原生图谱的公开接口")); }
 };
 
 const templater: ComponentDefinition = {
@@ -174,11 +139,16 @@ const wordsTrend: ComponentDefinition = {
   async render(container, _block, _host, plugin) {
     const history = plugin.config.showEstimatedHistory ? plugin.data.history : plugin.data.history.filter((point) => !point.estimated);
     if (!history.length) { container.createDiv({ text: t("暂无内容"), cls: "cw-empty" }); return; }
-    const max = Math.max(...history.map((point) => point.words), 1); const chart = container.createDiv({ cls: "cw-chart" });
-    for (const point of history.slice(-90)) {
+    const points = history.slice(-90); const max = Math.max(...points.map((point) => point.words), 1);
+    const frame = container.createDiv({ cls: "cw-chart-frame" });
+    const yAxis = frame.createDiv({ cls: "cw-chart-y-axis" }); yAxis.createSpan({ text: max.toLocaleString() }); yAxis.createSpan({ text: Math.round(max / 2).toLocaleString() }); yAxis.createSpan({ text: "0" });
+    const plot = frame.createDiv({ cls: "cw-chart-plot" }); plot.createDiv({ text: t("可读字数"), cls: "cw-chart-metric" });
+    const chart = plot.createDiv({ cls: "cw-chart" });
+    for (const point of points) {
       const bar = chart.createDiv({ cls: `cw-chart__bar${point.estimated ? " is-estimated" : ""}` });
       bar.style.setProperty("--cw-bar-height", `${Math.max(2, point.words / max * 100)}%`); bar.ariaLabel = `${point.date}: ${point.words}`;
     }
+    const xAxis = plot.createDiv({ cls: "cw-chart-x-axis" }); xAxis.createSpan({ text: points[0].date.slice(5) }); xAxis.createSpan({ text: points[Math.floor(points.length / 2)].date.slice(5) }); xAxis.createSpan({ text: points[points.length - 1].date.slice(5) });
   }
 };
 
@@ -187,14 +157,14 @@ const todayTasks: ComponentDefinition = {
   async render(container, _block, host, plugin) { await plugin.renderTasks(container, host); }
 };
 
-const BUILTINS = [vaultStats, todayTasks, quickJump, commandButtons, health, wordsTrend, graph, templater, baseView, dataview];
+const BUILTINS = [vaultStats, todayTasks, quickJump, commandButtons, wordsTrend, graph, templater, baseView, dataview];
 
 export function builtinDefinitions(): ComponentDefinition[] { return BUILTINS; }
 export function builtinById(id: string): ComponentDefinition | undefined { return BUILTINS.find((definition) => definition.id === id); }
 export function componentName(definition: ComponentDefinition): string {
   const names: Record<string, string> = {
     "builtin/vault-stats": t("仓库统计"), "builtin/today-tasks": t("今日任务"), "builtin/quick-jump": t("快速跳转"),
-    "builtin/command-buttons": t("命令按钮"), "builtin/note-health": t("笔记健康度"), "builtin/trends": t("字数与趋势"),
+    "builtin/command-buttons": t("命令按钮"), "builtin/trends": t("字数与趋势"),
     "builtin/graph": t("知识图谱"), "builtin/quick-create": t("快速新建"), "builtin/base": t("Base 视图"),
     "builtin/dataview": t("Dataview 查询")
   };

@@ -1,12 +1,14 @@
 # Custom Workspace
 
-Custom Workspace turns an Obsidian vault into an immediately useful home view. It provides local vault statistics, read-only journal tasks, quick note links, note-health checks, history trends, command buttons, graph access, and optional integrations for Templater, Bases, Dataview, and trusted local scripts.
+Custom Workspace turns an Obsidian vault into an immediately useful home view. It provides local vault statistics, read-only journal tasks, quick note links, history trends, command buttons, and optional integrations for Templater, Bases, Dataview, and trusted local scripts.
 
 ## Usage
 
 Enable the plugin, then use the ribbon icon or **Open workspace** command. Choose **Edit mode** in the view toolbar to add, remove, reorder, resize, and configure component instances. Changes are saved immediately.
 
 The plugin does not use the network, telemetry, accounts, or automatic updates. Native components do not require other plugins. Tasks are read-only: selecting one opens its source line.
+
+Obsidian does not expose a public API for embedding its native graph view inside a third-party component. The graph component therefore reports this limitation instead of showing an inaccurate imitation or moving Obsidian-owned DOM.
 
 ## Optional integrations
 

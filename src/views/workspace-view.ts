@@ -15,12 +15,14 @@ export class CustomWorkspaceView extends ItemView {
   getIcon(): string { return "layout-dashboard"; }
   async onOpen(): Promise<void> {
     this.contentEl.addClass("cw-root", `cw-density-${this.plugin.config.density}`);
+    this.addAction("refresh-cw", t("刷新工作台"), () => void this.refreshWorkspace());
     this.modeAction = this.addAction("pencil", t("编辑模式"), () => this.toggleEditing()); this.modeAction.addClass("cw-mode-toggle");
     this.renderer = new WorkspaceRenderer(this.plugin, this.contentEl, () => this.editing); this.addChild(this.renderer);
     await this.renderer.render();
   }
   async onClose(): Promise<void> { this.renderer = undefined; this.modeAction = undefined; this.contentEl.empty(); }
   async refresh(): Promise<void> { await this.renderer?.render(); }
+  private async refreshWorkspace(): Promise<void> { this.plugin.index.invalidate(); await this.plugin.reloadScripts(); await this.refresh(); }
   toggleEditing(): void { this.editing = !this.editing; this.updateModeAction(); void this.refresh(); }
   private updateModeAction(): void {
     if (!this.modeAction) return;

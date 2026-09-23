@@ -3,7 +3,7 @@ import { countReadableWords, stripMarkdown } from "../src/metrics/text";
 import { aggregateMetrics } from "../src/metrics/aggregate";
 import { assignedDate, classifyTask, parseTaskLine } from "../src/tasks/parser";
 import { parseScriptMetadata, renderFilenamePattern, withParamDefaults } from "../src/params/parser";
-import { cycleSpan, moveBlock } from "../src/workspace/layout";
+import { cycleSpan, moveBlock, moveBlockTo } from "../src/workspace/layout";
 import { estimateHistory, upsertSnapshot } from "../src/history/history";
 import { DEFAULT_DATA, mergeSettings, migrateData, type Block } from "../src/types";
 
@@ -58,6 +58,7 @@ describe("layout", () => {
     { id: "a", componentId: "x", span: 4, params: {} }, { id: "b", componentId: "x", span: 6, params: {} }
   ];
   it("moves within bounds", () => { expect(moveBlock(blocks, 0, 1).map((item) => item.id)).toEqual(["b", "a"]); expect(moveBlock(blocks, 0, -1)).toEqual(blocks); });
+  it("moves directly for drag and drop", () => { expect(moveBlockTo(blocks, 0, 1).map((item) => item.id)).toEqual(["b", "a"]); expect(moveBlockTo(blocks, -1, 1)).toEqual(blocks); });
   it("cycles all four width options within bounds", () => { expect(cycleSpan(3, 1)).toBe(4); expect(cycleSpan(4, 1)).toBe(6); expect(cycleSpan(12, 1)).toBe(12); });
 });
 
@@ -80,5 +81,9 @@ describe("settings migration", () => {
     expect(migrateData(null)).toEqual(DEFAULT_DATA);
     const migrated = migrateData({ settings: {}, workspace: { blocks: [{ id: "ok", componentId: "x", span: 12, params: {} }, { bad: true }] }, history: [] });
     expect(migrated.workspace.blocks).toHaveLength(1);
+  });
+  it("migrates the removed health component into selected vault stats", () => {
+    const migrated = migrateData({ workspace: { blocks: [{ id: "health", componentId: "builtin/note-health", span: 6, params: {} }] } });
+    expect(migrated.version).toBe(2); expect(migrated.workspace.blocks[0]).toMatchObject({ componentId: "builtin/vault-stats", params: { items: ["orphans", "empty", "short"] } });
   });
 });

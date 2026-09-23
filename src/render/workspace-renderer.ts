@@ -2,11 +2,12 @@ import { Component, Setting, setIcon } from "obsidian";
 import type CustomWorkspacePlugin from "../main";
 import type { Block, BlockSpan } from "../types";
 import { addParamSetting, componentName, selectedStats, STAT_LABELS, type StatKey } from "../components/registry";
-import { cycleSpan, moveBlock } from "../workspace/layout";
+import { cycleSpan, moveBlock, moveBlockTo } from "../workspace/layout";
 import { t } from "../i18n";
 
 export class WorkspaceRenderer extends Component {
   private scope?: Component;
+  private draggedIndex?: number;
   constructor(private readonly plugin: CustomWorkspacePlugin, private readonly container: HTMLElement, private readonly editing: () => boolean) { super(); }
   async render(): Promise<void> {
     if (this.scope) { this.removeChild(this.scope); this.scope.unload(); }
@@ -23,28 +24,33 @@ export class WorkspaceRenderer extends Component {
     const header = card.createDiv({ cls: "cw-block__header" });
     const title = header.createDiv({ cls: "cw-block__title" });
     if (definition) setIcon(title.createSpan({ cls: "cw-block__icon" }), definition.icon);
-    title.createSpan({ text: block.title || (definition ? componentName(definition) : t("未知组件")) });
-    if (this.editing()) this.renderControls(header, card, block, index, definition?.params ?? [], scope);
+    const titleText = title.createSpan({ text: block.title || (definition ? componentName(definition) : t("未知组件")) });
     const body = card.createDiv({ cls: "cw-block__body" }); body.createDiv({ text: t("加载中…"), cls: "cw-loading" });
-    const render = async (): Promise<void> => {
-      body.empty(); const child = new Component(); scope.addChild(child);
-      if (!definition) { body.createDiv({ text: t("未知组件"), cls: "cw-unavailable" }); return; }
-      try { await definition.render(body, block, child, this.plugin); }
+    let child: Component | undefined;
+    let previewGeneration = 0;
+    const renderPreview = async (): Promise<void> => {
+      const generation = ++previewGeneration;
+      if (child) { scope.removeChild(child); child.unload(); }
+      body.empty(); const renderTarget = body.createDiv({ cls: "cw-preview-render" }); child = new Component(); scope.addChild(child);
+      if (!definition) { renderTarget.createDiv({ text: t("未知组件"), cls: "cw-unavailable" }); return; }
+      try { await definition.render(renderTarget, block, child, this.plugin); }
       catch (error) {
-        body.empty(); const detail = error instanceof Error ? `${error.message}${error.stack ? `\n${error.stack.split("\n").slice(1, 3).join("\n")}` : ""}` : String(error);
-        body.createEl("pre", { text: block.componentId.startsWith("script/") ? `${block.componentId.slice(7)}\n${detail}` : detail, cls: "cw-error" });
-        const retry = body.createEl("button", { text: t("重试") }); retry.addEventListener("click", () => void render());
+        if (generation !== previewGeneration) return;
+        renderTarget.empty(); const detail = error instanceof Error ? `${error.message}${error.stack ? `\n${error.stack.split("\n").slice(1, 3).join("\n")}` : ""}` : String(error);
+        renderTarget.createEl("pre", { text: block.componentId.startsWith("script/") ? `${block.componentId.slice(7)}\n${detail}` : detail, cls: "cw-error" });
+        const retry = renderTarget.createEl("button", { text: t("重试") }); scope.registerDomEvent(retry, "click", () => void renderPreview());
       }
     };
+    if (this.editing()) this.renderControls(header, card, block, index, definition?.params ?? [], scope, renderPreview, titleText, definition ? componentName(definition) : t("未知组件"));
     const ViewIntersectionObserver = card.ownerDocument.defaultView?.IntersectionObserver;
-    if (!ViewIntersectionObserver) { void render(); return; }
-    const observer = new ViewIntersectionObserver((entries) => { if (entries.some((entry) => entry.isIntersecting)) { observer.disconnect(); void render(); } }, { rootMargin: "160px" });
+    if (!ViewIntersectionObserver) { void renderPreview(); return; }
+    const observer = new ViewIntersectionObserver((entries) => { if (entries.some((entry) => entry.isIntersecting)) { observer.disconnect(); void renderPreview(); } }, { rootMargin: "160px" });
     observer.observe(card); scope.register(() => observer.disconnect());
   }
-  private renderControls(header: HTMLElement, card: HTMLElement, block: Block, index: number, params: import("../params/parser").ParamDefinition[], scope: Component): void {
+  private renderControls(header: HTMLElement, card: HTMLElement, block: Block, index: number, params: import("../params/parser").ParamDefinition[], scope: Component, refreshPreview: () => Promise<void>, titleText: HTMLElement, defaultTitle: string): void {
     const controls = header.createDiv({ cls: "cw-block__controls" });
     const button = (icon: string, label: string, action: () => void): HTMLButtonElement => {
-      const element = controls.createEl("button", { attr: { "aria-label": label, title: label } }); setIcon(element, icon); element.addEventListener("click", action); return element;
+      const element = controls.createEl("button", { attr: { "aria-label": label, title: label } }); setIcon(element, icon); scope.registerDomEvent(element, "click", action); return element;
     };
     button("arrow-up", t("上移"), () => void this.move(index, -1)); button("arrow-down", t("下移"), () => void this.move(index, 1));
     const widths = controls.createDiv({ cls: "cw-width-options", attr: { "aria-label": t("组件宽度") } });
@@ -53,7 +59,13 @@ export class WorkspaceRenderer extends Component {
       const option = widths.createEl("button", { text: label, cls: block.span === span ? "is-active" : "" });
       scope.registerDomEvent(option, "click", () => void this.setSpan(block, span));
     }
-    button("settings-2", t("配置"), () => this.toggleConfig(card, block, params, scope)); button("trash-2", t("删除"), () => void this.remove(index));
+    button("settings-2", t("配置"), () => this.toggleConfig(card, block, params, scope, refreshPreview, titleText, defaultTitle)); button("trash-2", t("删除"), () => void this.remove(index));
+    header.draggable = true; header.addClass("cw-drag-handle");
+    scope.registerDomEvent(header, "dragstart", (event) => { this.draggedIndex = index; card.addClass("is-dragging"); event.dataTransfer?.setData("text/plain", block.id); if (event.dataTransfer) event.dataTransfer.effectAllowed = "move"; });
+    scope.registerDomEvent(header, "dragend", () => { this.draggedIndex = undefined; card.removeClass("is-dragging"); });
+    scope.registerDomEvent(card, "dragover", (event) => { if (this.draggedIndex === undefined) return; event.preventDefault(); card.addClass("is-drag-over"); });
+    scope.registerDomEvent(card, "dragleave", () => card.removeClass("is-drag-over"));
+    scope.registerDomEvent(card, "drop", (event) => { event.preventDefault(); card.removeClass("is-drag-over"); if (this.draggedIndex !== undefined) void this.moveTo(this.draggedIndex, index); });
     scope.registerDomEvent(card, "keydown", (event) => {
       if (!event.altKey) return;
       if (event.key === "ArrowUp") { event.preventDefault(); void this.move(index, -1); }
@@ -63,45 +75,45 @@ export class WorkspaceRenderer extends Component {
     });
     card.tabIndex = 0;
   }
-  private toggleConfig(card: HTMLElement, block: Block, params: import("../params/parser").ParamDefinition[], scope: Component): void {
+  private toggleConfig(card: HTMLElement, block: Block, params: import("../params/parser").ParamDefinition[], scope: Component, refreshPreview: () => Promise<void>, titleText: HTMLElement, defaultTitle: string): void {
     const existing = card.querySelector(".cw-block__config"); if (existing) { existing.remove(); return; }
     const config = card.createDiv({ cls: "cw-block__config" });
-    new Setting(config).setName(t("标题")).addText((text) => text.setValue(block.title ?? "").onChange(async (value) => { block.title = value || undefined; await this.plugin.persist(); }));
-    if (block.componentId === "builtin/vault-stats") { this.renderStatsEditor(config, block); return; }
-    if (block.componentId === "builtin/command-buttons") { this.renderCommandEditor(config, block); return; }
-    if (block.componentId === "builtin/dataview") { this.renderDataviewEditor(config, block, scope); return; }
-    for (const param of params) addParamSetting(config, param, block, async () => this.persist());
+    new Setting(config).setName(t("标题")).addText((text) => text.setValue(block.title ?? "").onChange(async (value) => { block.title = value || undefined; titleText.setText(block.title || defaultTitle); await this.plugin.persist(); }));
+    if (block.componentId === "builtin/vault-stats") { this.renderStatsEditor(config, block, refreshPreview); return; }
+    if (block.componentId === "builtin/command-buttons") { this.renderCommandEditor(config, block, refreshPreview); return; }
+    if (block.componentId === "builtin/dataview") { this.renderDataviewEditor(config, block, scope, refreshPreview); return; }
+    for (const param of params) addParamSetting(config, param, block, async () => { await this.plugin.persist(); await refreshPreview(); });
   }
-  private renderStatsEditor(container: HTMLElement, block: Block): void {
+  private renderStatsEditor(container: HTMLElement, block: Block, refreshPreview: () => Promise<void>): void {
     const selected = new Set<StatKey>(selectedStats(block.params.items));
     const group = container.createDiv({ cls: "cw-stats-editor" }); group.createEl("h4", { text: t("统计项") });
     for (const [key, label] of Object.entries(STAT_LABELS) as Array<[StatKey, string]>) {
       new Setting(group).setName(t(label)).addToggle((toggle) => toggle.setValue(selected.has(key)).onChange(async (enabled) => {
         if (enabled) selected.add(key); else selected.delete(key);
-        block.params.items = [...selected]; await this.plugin.persist();
+        block.params.items = [...selected]; await this.plugin.persist(); await refreshPreview();
       }));
     }
   }
-  private renderCommandEditor(container: HTMLElement, block: Block): void {
+  private renderCommandEditor(container: HTMLElement, block: Block, refreshPreview: () => Promise<void>): void {
     const values = Array.isArray(block.params.buttons) ? block.params.buttons.filter((value): value is { [key: string]: import("../types").ParamValue } => typeof value === "object" && value !== null && !Array.isArray(value)) : [];
     const draw = (): void => {
       container.querySelector(".cw-command-editor")?.remove();
       const editor = container.createDiv({ cls: "cw-command-editor" });
       values.forEach((value, index) => {
         const row = editor.createDiv({ cls: "cw-command-editor__row" });
-        new Setting(row).setName(t("显示名")).addText((text) => text.setValue(typeof value.label === "string" ? value.label : "").onChange(async (next) => { value.label = next; await this.plugin.persist(); }));
+        new Setting(row).setName(t("显示名")).addText((text) => text.setValue(typeof value.label === "string" ? value.label : "").onChange(async (next) => { value.label = next; await this.plugin.persist(); await refreshPreview(); }));
         new Setting(row).setName(t("命令")).addDropdown((dropdown) => {
           dropdown.addOption("", t("请选择命令")); for (const command of this.plugin.commands.list()) dropdown.addOption(command.id, command.name);
-          dropdown.setValue(typeof value.command === "string" ? value.command : "").onChange(async (next) => { value.command = next; await this.plugin.persist(); });
+          dropdown.setValue(typeof value.command === "string" ? value.command : "").onChange(async (next) => { value.command = next; await this.plugin.persist(); await refreshPreview(); });
         });
-        new Setting(row).setName(t("要确认")).addToggle((toggle) => toggle.setValue(value.confirm === true).onChange(async (next) => { value.confirm = next; await this.plugin.persist(); }));
-        new Setting(row).addButton((button) => button.setButtonText(t("删除")).onClick(async () => { values.splice(index, 1); block.params.buttons = values; await this.plugin.persist(); draw(); }));
+        new Setting(row).setName(t("要确认")).addToggle((toggle) => toggle.setValue(value.confirm === true).onChange(async (next) => { value.confirm = next; await this.plugin.persist(); await refreshPreview(); }));
+        new Setting(row).addButton((button) => button.setButtonText(t("删除")).onClick(async () => { values.splice(index, 1); block.params.buttons = values; await this.plugin.persist(); await refreshPreview(); draw(); }));
       });
-      new Setting(editor).addButton((button) => button.setButtonText(t("添加按钮")).setCta().onClick(async () => { values.push({ label: "", command: "", confirm: false }); block.params.buttons = values; await this.plugin.persist(); draw(); }));
+      new Setting(editor).addButton((button) => button.setButtonText(t("添加按钮")).setCta().onClick(async () => { values.push({ label: "", command: "", confirm: false }); block.params.buttons = values; await this.plugin.persist(); await refreshPreview(); draw(); }));
     };
     draw();
   }
-  private renderDataviewEditor(container: HTMLElement, block: Block, scope: Component): void {
+  private renderDataviewEditor(container: HTMLElement, block: Block, scope: Component, refreshPreview: () => Promise<void>): void {
     let draft = typeof block.params.code === "string" ? block.params.code : "";
     const area = container.createEl("textarea", { cls: "cw-code-input", attr: { rows: "8", "aria-label": t("代码") } }); area.value = draft;
     scope.registerDomEvent(area, "input", () => { draft = area.value; });
@@ -110,7 +122,7 @@ export class WorkspaceRenderer extends Component {
       preview.empty(); const api = this.plugin.bridge.dataview();
       if (!api) { preview.setText(t("需要 Dataview 插件")); return; }
       const child = new Component(); scope.addChild(child);
-      try { await api.executeJs(draft, preview, child, this.plugin.app.workspace.getActiveFile()?.path ?? ""); block.params.code = draft; await this.plugin.persist(); preview.createDiv({ text: t("试运行成功，已保存。"), cls: "cw-success" }); }
+      try { await api.executeJs(draft, preview, child, this.plugin.app.workspace.getActiveFile()?.path ?? ""); block.params.code = draft; await this.plugin.persist(); await refreshPreview(); preview.createDiv({ text: t("试运行成功，已保存。"), cls: "cw-success" }); }
       catch (error) { preview.createEl("pre", { text: error instanceof Error ? error.message : String(error), cls: "cw-error" }); }
     }));
   }
@@ -123,6 +135,7 @@ export class WorkspaceRenderer extends Component {
     }
   }
   private async move(index: number, offset: -1 | 1): Promise<void> { this.plugin.data.workspace.blocks = moveBlock(this.plugin.data.workspace.blocks, index, offset); await this.persist(); }
+  private async moveTo(from: number, to: number): Promise<void> { this.plugin.data.workspace.blocks = moveBlockTo(this.plugin.data.workspace.blocks, from, to); this.draggedIndex = undefined; await this.persist(); }
   private async changeSpan(block: Block, direction: -1 | 1): Promise<void> { block.span = cycleSpan(block.span, direction); await this.persist(); }
   private async setSpan(block: Block, span: BlockSpan): Promise<void> { block.span = span; await this.persist(); }
   private async remove(index: number): Promise<void> { this.plugin.data.workspace.blocks.splice(index, 1); await this.persist(); }
