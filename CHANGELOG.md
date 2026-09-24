@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.11
+
+- Resolve Quick Create templates from Templater's configured template folder, accepting paths both with and without the `.md` extension.
+- List available Templater templates in Quick Create settings for reliable selection.
+- Add a visible theme-aware border and hover feedback to Quick Start command buttons.
+
 ## 0.1.10
 
 - Prevent long Quick Jump note titles from overflowing narrow cards.
