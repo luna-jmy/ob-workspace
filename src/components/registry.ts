@@ -115,8 +115,10 @@ const templater: ComponentDefinition = {
       const label = paramString(definition.label).trim() || t("快速新建");
       const button = wrapper.createEl("button", { text: label, cls: "cw-action-button cw-action-button--create" });
       host.registerDomEvent(button, "click", () => {
+        const templatePath = paramString(definition.template); const template = plugin.bridge.templaterTemplate(templatePath);
+        if (!template) { new Notice(`${t("找不到模板文件")}: ${templatePath || t("未配置")}`); return; }
         const filename = renderFilenamePattern(paramString(definition.filename, "{{date:YYYY-MM-DD}}"), paramString(definition.title), (format) => moment().format(format));
-        void api.create_new_note_from_template(paramString(definition.template), paramString(definition.folder), filename, true)
+        void api.create_new_note_from_template(template, paramString(definition.folder), filename, true)
           .catch((error: unknown) => new Notice(error instanceof Error ? error.message : String(error)));
       });
     }

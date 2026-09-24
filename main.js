@@ -22,7 +22,7 @@ __export(main_exports, {
   default: () => CustomWorkspacePlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian8 = require("obsidian");
+var import_obsidian9 = require("obsidian");
 
 // src/settings.ts
 var import_obsidian2 = require("obsidian");
@@ -92,6 +92,7 @@ var en = {
   "\u6DFB\u52A0\u6309\u94AE": "Add button",
   "\u6309\u94AE\u540D\u79F0": "Button label",
   "\u6A21\u677F\u6587\u4EF6": "Template file",
+  "\u8BF7\u9009\u62E9\u6A21\u677F\u6587\u4EF6": "Select a template file",
   "\u76EE\u6807\u76EE\u5F55": "Destination folder",
   "\u6587\u4EF6\u540D\u6A21\u5F0F": "Filename pattern",
   "\u6807\u9898\u53D8\u91CF": "Title variable",
@@ -150,6 +151,8 @@ var en = {
   "\u6E05\u7A7A": "Clear",
   "\u5C1A\u65E0\u547D\u4EE4\u6309\u94AE\uFF0C\u8BF7\u5728\u7F16\u8F91\u6A21\u5F0F\u914D\u7F6E\u3002": "No command buttons yet. Configure them in edit mode.",
   "\u5C1A\u65E0\u5FEB\u901F\u65B0\u5EFA\u6309\u94AE\uFF0C\u8BF7\u5728\u7F16\u8F91\u6A21\u5F0F\u914D\u7F6E\u3002": "No quick-create buttons yet. Configure them in edit mode.",
+  "\u627E\u4E0D\u5230\u6A21\u677F\u6587\u4EF6": "Template file not found",
+  "\u672A\u914D\u7F6E": "Not configured",
   "\u6253\u5F00": "Open",
   "Base \u6587\u4EF6": "Base file",
   "\u8BF7\u9009\u62E9 Base \u6587\u4EF6": "Select a Base file",
@@ -684,8 +687,14 @@ var templater = {
       const label = paramString(definition.label).trim() || t("\u5FEB\u901F\u65B0\u5EFA");
       const button = wrapper.createEl("button", { text: label, cls: "cw-action-button cw-action-button--create" });
       host.registerDomEvent(button, "click", () => {
+        const templatePath = paramString(definition.template);
+        const template = plugin.bridge.templaterTemplate(templatePath);
+        if (!template) {
+          new import_obsidian4.Notice(`${t("\u627E\u4E0D\u5230\u6A21\u677F\u6587\u4EF6")}: ${templatePath || t("\u672A\u914D\u7F6E")}`);
+          return;
+        }
         const filename = renderFilenamePattern(paramString(definition.filename, "{{date:YYYY-MM-DD}}"), paramString(definition.title), (format) => moment().format(format));
-        void api.create_new_note_from_template(paramString(definition.template), paramString(definition.folder), filename, true).catch((error) => new import_obsidian4.Notice(error instanceof Error ? error.message : String(error)));
+        void api.create_new_note_from_template(template, paramString(definition.folder), filename, true).catch((error) => new import_obsidian4.Notice(error instanceof Error ? error.message : String(error)));
       });
     }
   }
@@ -1264,11 +1273,18 @@ ${detail}` : detail, cls: "cw-error" });
           await this.plugin.persist();
           await refreshPreview();
         }));
-        new import_obsidian5.Setting(row).setName(t("\u6A21\u677F\u6587\u4EF6")).addText((text) => text.setValue(typeof value.template === "string" ? value.template : "").onChange(async (next) => {
-          value.template = next;
-          await this.plugin.persist();
-          await refreshPreview();
-        }));
+        new import_obsidian5.Setting(row).setName(t("\u6A21\u677F\u6587\u4EF6")).addDropdown((dropdown) => {
+          const current = typeof value.template === "string" ? value.template : "";
+          const files = this.plugin.bridge.templaterTemplates();
+          dropdown.addOption("", t("\u8BF7\u9009\u62E9\u6A21\u677F\u6587\u4EF6"));
+          if (current && !files.some((file) => file.path === current)) dropdown.addOption(current, current);
+          for (const file of files) dropdown.addOption(file.path, file.path);
+          dropdown.setValue(current).onChange(async (next) => {
+            value.template = next;
+            await this.plugin.persist();
+            await refreshPreview();
+          });
+        });
         new import_obsidian5.Setting(row).setName(t("\u76EE\u6807\u76EE\u5F55")).addText((text) => text.setValue(typeof value.folder === "string" ? value.folder : "").onChange(async (next) => {
           value.folder = next;
           await this.plugin.persist();
@@ -1568,6 +1584,23 @@ var CommandService = class {
 };
 
 // src/services/plugin-bridge.ts
+var import_obsidian7 = require("obsidian");
+
+// src/params/template-path.ts
+function cleanPath(path) {
+  return path.trim().replace(/\\/g, "/").replace(/^\/+|\/+$/g, "").replace(/\/{2,}/g, "/");
+}
+function templatePathCandidates(input, templateFolder = "") {
+  const path = cleanPath(input);
+  const folder = cleanPath(templateFolder);
+  if (!path) return [];
+  const withExtension = path.toLowerCase().endsWith(".md") ? path : `${path}.md`;
+  const candidates = [withExtension];
+  if (folder && withExtension !== folder && !withExtension.startsWith(`${folder}/`)) candidates.push(`${folder}/${withExtension}`);
+  return [...new Set(candidates)];
+}
+
+// src/services/plugin-bridge.ts
 var PluginBridge = class {
   constructor(app) {
     this.app = app;
@@ -1586,10 +1619,26 @@ var PluginBridge = class {
     const plugin = this.plugins()["templater-obsidian"];
     return typeof ((_a = plugin == null ? void 0 : plugin.templater) == null ? void 0 : _a.create_new_note_from_template) === "function" ? plugin.templater : void 0;
   }
+  templaterTemplate(path) {
+    var _a;
+    const plugin = this.plugins()["templater-obsidian"];
+    const folder = typeof ((_a = plugin == null ? void 0 : plugin.settings) == null ? void 0 : _a.templates_folder) === "string" ? plugin.settings.templates_folder : "";
+    for (const candidate of templatePathCandidates(path, folder)) {
+      const file = this.app.vault.getAbstractFileByPath((0, import_obsidian7.normalizePath)(candidate));
+      if (file instanceof import_obsidian7.TFile && file.extension === "md") return file;
+    }
+    return null;
+  }
+  templaterTemplates() {
+    var _a;
+    const plugin = this.plugins()["templater-obsidian"];
+    const folder = typeof ((_a = plugin == null ? void 0 : plugin.settings) == null ? void 0 : _a.templates_folder) === "string" ? (0, import_obsidian7.normalizePath)(plugin.settings.templates_folder) : "";
+    return this.app.vault.getMarkdownFiles().filter((file) => !folder || file.path === folder || file.path.startsWith(`${folder}/`)).sort((a, b) => a.path.localeCompare(b.path));
+  }
 };
 
 // src/services/vault-index.ts
-var import_obsidian7 = require("obsidian");
+var import_obsidian8 = require("obsidian");
 
 // src/metrics/text.ts
 function stripMarkdown(input) {
@@ -1679,12 +1728,12 @@ var VaultIndex = class {
       var _a;
       if (!this.included(file.path)) return false;
       const cache = this.app.metadataCache.getFileCache(file);
-      return matchesNoteFilter({ path: file.path, tags: cache ? (_a = (0, import_obsidian7.getAllTags)(cache)) != null ? _a : [] : [], frontmatter: cache == null ? void 0 : cache.frontmatter }, filter);
+      return matchesNoteFilter({ path: file.path, tags: cache ? (_a = (0, import_obsidian8.getAllTags)(cache)) != null ? _a : [] : [], frontmatter: cache == null ? void 0 : cache.frontmatter }, filter);
     }).sort((a, b) => b.stat.mtime - a.stat.mtime).slice(0, limit);
   }
   find(path) {
     const file = this.app.vault.getAbstractFileByPath(path);
-    return file instanceof import_obsidian7.TFile ? file : null;
+    return file instanceof import_obsidian8.TFile ? file : null;
   }
 };
 
@@ -1728,7 +1777,7 @@ function classifyTask(task, fileDate, today, recentCutoff) {
 }
 
 // src/main.ts
-var CustomWorkspacePlugin = class extends import_obsidian8.Plugin {
+var CustomWorkspacePlugin = class extends import_obsidian9.Plugin {
   constructor() {
     super(...arguments);
     this.data = structuredClone(DEFAULT_DATA);
@@ -1818,13 +1867,13 @@ var CustomWorkspacePlugin = class extends import_obsidian8.Plugin {
   }
   scriptDirectory() {
     var _a;
-    return (0, import_obsidian8.normalizePath)(`${(_a = this.manifest.dir) != null ? _a : `${this.app.vault.configDir}/plugins/${this.manifest.id}`}/data`);
+    return (0, import_obsidian9.normalizePath)(`${(_a = this.manifest.dir) != null ? _a : `${this.app.vault.configDir}/plugins/${this.manifest.id}`}/data`);
   }
   async ensureScriptDirectory() {
     const adapter = this.app.vault.adapter;
     const directory = this.scriptDirectory();
     if (!await adapter.exists(directory)) await adapter.mkdir(directory);
-    const readme = (0, import_obsidian8.normalizePath)(`${directory}/README.md`);
+    const readme = (0, import_obsidian9.normalizePath)(`${directory}/README.md`);
     if (!await adapter.exists(readme)) await adapter.write(readme, "# Custom Workspace scripts\n\nPlace trusted `.js` files here. Scripts can read and write your vault and are not sandboxed.\n");
   }
   async reloadScripts() {
@@ -1842,13 +1891,13 @@ var CustomWorkspacePlugin = class extends import_obsidian8.Plugin {
     }
   }
   async readScript(filename) {
-    return this.app.vault.adapter.read((0, import_obsidian8.normalizePath)(`${this.scriptDirectory()}/${filename}`));
+    return this.app.vault.adapter.read((0, import_obsidian9.normalizePath)(`${this.scriptDirectory()}/${filename}`));
   }
   async createScript() {
     const adapter = this.app.vault.adapter;
     let index = 1;
     let filename = "my-component.js";
-    while (await adapter.exists((0, import_obsidian8.normalizePath)(`${this.scriptDirectory()}/${filename}`))) {
+    while (await adapter.exists((0, import_obsidian9.normalizePath)(`${this.scriptDirectory()}/${filename}`))) {
       index += 1;
       filename = `my-component-${index}.js`;
     }
@@ -1860,9 +1909,9 @@ var CustomWorkspacePlugin = class extends import_obsidian8.Plugin {
 const { container, params } = ctx;
 container.createEl("p", { text: String(params.title) });
 `;
-    await adapter.write((0, import_obsidian8.normalizePath)(`${this.scriptDirectory()}/${filename}`), source);
+    await adapter.write((0, import_obsidian9.normalizePath)(`${this.scriptDirectory()}/${filename}`), source);
     await this.reloadScripts();
-    new import_obsidian8.Notice(`${t("\u5DF2\u65B0\u5EFA\u811A\u672C")}: ${filename}`);
+    new import_obsidian9.Notice(`${t("\u5DF2\u65B0\u5EFA\u811A\u672C")}: ${filename}`);
   }
   async renderTasks(container, host) {
     if (!this.config.journalFolder) {
@@ -1899,7 +1948,7 @@ container.createEl("p", { text: String(params.title) });
     const leaf = this.app.workspace.getLeaf(false);
     await leaf.openFile(task.file);
     const view = leaf.view;
-    if (view instanceof import_obsidian8.MarkdownView) {
+    if (view instanceof import_obsidian9.MarkdownView) {
       view.editor.setCursor({ line: task.line, ch: 0 });
       view.editor.scrollIntoView({ from: { line: task.line, ch: 0 }, to: { line: task.line, ch: task.text.length } }, true);
     }

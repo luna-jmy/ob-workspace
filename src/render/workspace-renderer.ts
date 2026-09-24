@@ -144,7 +144,13 @@ export class WorkspaceRenderer extends Component {
       values.forEach((value, index) => {
         const row = editor.createDiv({ cls: "cw-command-editor__row" });
         new Setting(row).setName(t("按钮名称")).addText((text) => text.setValue(typeof value.label === "string" ? value.label : "").onChange(async (next) => { value.label = next; await this.plugin.persist(); await refreshPreview(); }));
-        new Setting(row).setName(t("模板文件")).addText((text) => text.setValue(typeof value.template === "string" ? value.template : "").onChange(async (next) => { value.template = next; await this.plugin.persist(); await refreshPreview(); }));
+        new Setting(row).setName(t("模板文件")).addDropdown((dropdown) => {
+          const current = typeof value.template === "string" ? value.template : ""; const files = this.plugin.bridge.templaterTemplates();
+          dropdown.addOption("", t("请选择模板文件"));
+          if (current && !files.some((file) => file.path === current)) dropdown.addOption(current, current);
+          for (const file of files) dropdown.addOption(file.path, file.path);
+          dropdown.setValue(current).onChange(async (next) => { value.template = next; await this.plugin.persist(); await refreshPreview(); });
+        });
         new Setting(row).setName(t("目标目录")).addText((text) => text.setValue(typeof value.folder === "string" ? value.folder : "").onChange(async (next) => { value.folder = next; await this.plugin.persist(); await refreshPreview(); }));
         new Setting(row).setName(t("文件名模式")).addText((text) => text.setValue(typeof value.filename === "string" ? value.filename : "{{date:YYYY-MM-DD}} {{title}}").onChange(async (next) => { value.filename = next; await this.plugin.persist(); await refreshPreview(); }));
         new Setting(row).setName(t("标题变量")).addText((text) => text.setValue(typeof value.title === "string" ? value.title : "").onChange(async (next) => { value.title = next; await this.plugin.persist(); await refreshPreview(); }));

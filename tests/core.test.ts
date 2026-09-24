@@ -9,6 +9,7 @@ import { DEFAULT_DATA, mergeSettings, migrateData, type Block } from "../src/typ
 import { activityLevel, aggregateHeatmap, aggregateTopFolders, areaPath, linePathRange, resolveCreatedDate } from "../src/metrics/analytics";
 import { svgClasses } from "../src/ui/classes";
 import { filterNotePaths, matchesNoteFilter } from "../src/metrics/note-filter";
+import { templatePathCandidates } from "../src/params/template-path";
 
 describe("markdown text metrics", () => {
   it("removes metadata, code, comments and URL targets", () => {
@@ -104,6 +105,17 @@ describe("script parameters", () => {
     expect(withParamDefaults([{ key: "x", type: "number", defaultValue: 3 }], {})).toEqual({ x: 3 });
   });
   it("renders safe filename patterns", () => { expect(renderFilenamePattern("{{date:YYYY}} {{title}}", "a/b", () => "2026")).toBe("2026 a-b"); });
+});
+
+describe("Templater paths", () => {
+  it("accepts template paths with or without .md and checks the configured template folder", () => {
+    expect(templatePathCandidates("900 Assets/910 Templates/TPL-NewNote", "900 Assets/910 Templates")).toEqual([
+      "900 Assets/910 Templates/TPL-NewNote.md"
+    ]);
+    expect(templatePathCandidates("TPL-NewNote.md", "900 Assets/910 Templates")).toEqual([
+      "TPL-NewNote.md", "900 Assets/910 Templates/TPL-NewNote.md"
+    ]);
+  });
 });
 
 describe("layout", () => {
