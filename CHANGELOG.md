@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.10
+
+- Prevent long Quick Jump note titles from overflowing narrow cards.
+- Support multiple Quick Create buttons with independent labels, templates, folders, filename patterns, and title variables.
+- Add ordering controls to Command and Quick Create buttons.
+- Use distinct theme-aware colors for Command and Quick Create actions.
+- Migrate existing single-button Quick Create settings without losing their template configuration.
+
 ## 0.1.9
 
 - Rename the workspace tab to My Workspace and use a distinct home icon.
