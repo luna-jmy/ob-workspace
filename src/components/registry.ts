@@ -67,7 +67,7 @@ const quickJump: ComponentDefinition = {
     { key: "tag", type: "tag", defaultValue: "" }, { key: "frontmatterKey", type: "text", defaultValue: "" },
     { key: "frontmatterValue", type: "text", defaultValue: "" }
   ],
-  async render(container, block, _host, plugin) {
+  async render(container, block, host, plugin) {
     const files = plugin.index.recentNotes(paramNumber(block.params.limit, 8), {
       folder: paramString(block.params.folder), tag: paramString(block.params.tag),
       frontmatterKey: paramString(block.params.frontmatterKey), frontmatterValue: paramString(block.params.frontmatterValue)
@@ -75,8 +75,8 @@ const quickJump: ComponentDefinition = {
     if (!files.length) { container.createDiv({ text: t("暂无内容"), cls: "cw-empty" }); return; }
     for (const file of files) {
       const button = container.createEl("button", { cls: "cw-note-link" });
-      button.createSpan({ text: file.basename }); button.createEl("time", { text: moment(file.stat.mtime).format("MM-DD HH:mm") });
-      button.addEventListener("click", () => void plugin.app.workspace.getLeaf(false).openFile(file));
+      button.createSpan({ text: file.basename, cls: "cw-note-link__title" }); button.createEl("time", { text: moment(file.stat.mtime).format("MM-DD HH:mm"), cls: "cw-note-link__time" });
+      host.registerDomEvent(button, "click", () => void plugin.app.workspace.getLeaf(false).openFile(file));
     }
   }
 };
@@ -84,37 +84,42 @@ const quickJump: ComponentDefinition = {
 interface CommandButton { label?: ParamValue; icon?: ParamValue; command?: ParamValue; confirm?: ParamValue }
 const commandButtons: ComponentDefinition = {
   id: "builtin/command-buttons", name: "命令按钮", icon: "command", description: "", params: [],
-  async render(container, block, _host, plugin) {
+  async render(container, block, host, plugin) {
     if (!plugin.commands.available()) { unavailable(container, t("命令接口不可用")); return; }
     const buttons = Array.isArray(block.params.buttons) ? block.params.buttons as CommandButton[] : [];
     if (!buttons.length) { container.createDiv({ text: t("尚无命令按钮，请在编辑模式配置。"), cls: "cw-empty" }); return; }
-    const wrapper = container.createDiv({ cls: "cw-actions" });
+    const wrapper = container.createDiv({ cls: "cw-actions cw-actions--command" });
     for (const definition of buttons) {
       const command = paramString(definition.command); const known = plugin.commands.list().some((item) => item.id === command);
-      const button = wrapper.createEl("button", { text: paramString(definition.label, command), cls: "mod-cta" });
+      const label = paramString(definition.label).trim() || command;
+      const button = wrapper.createEl("button", { text: label, cls: "cw-action-button cw-action-button--command" });
       if (definition.icon) setIcon(button.createSpan({ cls: "cw-button-icon" }), paramString(definition.icon));
       button.disabled = !known;
-      button.addEventListener("click", () => {
-        if (definition.confirm && !container.ownerDocument.defaultView?.confirm(paramString(definition.label, command))) return;
+      host.registerDomEvent(button, "click", () => {
+        if (definition.confirm && !container.ownerDocument.defaultView?.confirm(label)) return;
         plugin.commands.execute(command);
       });
     }
   }
 };
 
+interface QuickCreateButton { label?: ParamValue; template?: ParamValue; folder?: ParamValue; filename?: ParamValue; title?: ParamValue }
 const templater: ComponentDefinition = {
-  id: "builtin/quick-create", name: "快速新建", icon: "file-plus", description: "", params: [
-    { key: "template", type: "note", defaultValue: "" }, { key: "folder", type: "folder", defaultValue: "" },
-    { key: "filename", type: "text", defaultValue: "{{date:YYYY-MM-DD}} {{title}}" }, { key: "title", type: "text", defaultValue: "" }
-  ],
-  async render(container, block, _host, plugin) {
+  id: "builtin/quick-create", name: "快速新建", icon: "file-plus", description: "", params: [],
+  async render(container, block, host, plugin) {
     const api = plugin.bridge.templater(); if (!api) { unavailable(container, t("需要 Templater 插件")); return; }
-    const button = container.createEl("button", { text: t("快速新建"), cls: "mod-cta" });
-    button.addEventListener("click", () => {
-      const filename = renderFilenamePattern(paramString(block.params.filename, "{{date:YYYY-MM-DD}}"), paramString(block.params.title), (format) => moment().format(format));
-      void api.create_new_note_from_template(paramString(block.params.template), paramString(block.params.folder), filename, true)
-        .catch((error: unknown) => new Notice(error instanceof Error ? error.message : String(error)));
-    });
+    const buttons = Array.isArray(block.params.buttons) ? block.params.buttons as QuickCreateButton[] : [];
+    if (!buttons.length) { container.createDiv({ text: t("尚无快速新建按钮，请在编辑模式配置。"), cls: "cw-empty" }); return; }
+    const wrapper = container.createDiv({ cls: "cw-actions cw-actions--create" });
+    for (const definition of buttons) {
+      const label = paramString(definition.label).trim() || t("快速新建");
+      const button = wrapper.createEl("button", { text: label, cls: "cw-action-button cw-action-button--create" });
+      host.registerDomEvent(button, "click", () => {
+        const filename = renderFilenamePattern(paramString(definition.filename, "{{date:YYYY-MM-DD}}"), paramString(definition.title), (format) => moment().format(format));
+        void api.create_new_note_from_template(paramString(definition.template), paramString(definition.folder), filename, true)
+          .catch((error: unknown) => new Notice(error instanceof Error ? error.message : String(error)));
+      });
+    }
   }
 };
 

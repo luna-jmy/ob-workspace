@@ -13,7 +13,7 @@
 .cw-root .cw-block.is-dragging { opacity: 0.45; }
 .cw-root .cw-block.is-drag-over { outline: 2px solid var(--interactive-accent); outline-offset: 2px; }
 .cw-root .cw-block__icon, .cw-root .cw-button-icon { display: inline-flex; }
-.cw-root .cw-block__controls, .cw-root .cw-actions { display: flex; flex-wrap: wrap; gap: var(--size-4-1); }
+.cw-root .cw-block__controls, .cw-root .cw-actions { min-width: 0; display: flex; flex-wrap: wrap; gap: var(--size-4-1); }
 .cw-root .cw-block__controls button { padding: var(--size-4-1); }
 .cw-root .cw-width-options { display: flex; gap: 1px; padding: 1px; border: 1px solid var(--background-modifier-border); border-radius: var(--radius-s); }
 .cw-root .cw-width-options button { height: var(--input-height); padding-inline: var(--size-4-2); font-size: var(--font-ui-smaller); }
@@ -30,8 +30,14 @@
 .cw-root .cw-metric.is-clickable { cursor: pointer; }
 .cw-root .cw-metric__value { font-size: var(--font-ui-large); font-weight: var(--font-bold); }
 .cw-root .cw-metric__label, .cw-root time, .cw-root .cw-empty { color: var(--text-muted); }
-.cw-root .cw-note-link, .cw-root .cw-task, .cw-root .cw-link-button { width: 100%; height: auto; padding: var(--size-4-2); display: flex; justify-content: space-between; text-align: start; }
+.cw-root .cw-note-link, .cw-root .cw-task, .cw-root .cw-link-button { width: 100%; min-width: 0; height: auto; padding: var(--size-4-2); display: flex; justify-content: space-between; text-align: start; }
+.cw-root .cw-note-link { gap: var(--size-4-2); overflow: hidden; }
+.cw-root .cw-note-link__title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cw-root .cw-note-link__time { flex: 0 0 auto; white-space: nowrap; }
 .cw-root .cw-task { min-width: 0; display: block; overflow: hidden; overflow-wrap: anywhere; white-space: normal; text-overflow: ellipsis; line-height: var(--line-height-normal); }
+.cw-root .cw-action-button { max-width: 100%; min-width: 0; height: auto; white-space: normal; overflow-wrap: anywhere; }
+.cw-root .cw-action-button--command { color: var(--text-normal); background: var(--background-secondary); border-color: var(--background-modifier-border); }
+.cw-root .cw-action-button--create { color: var(--text-on-accent); background: var(--interactive-accent); }
 .cw-root .cw-task-group + .cw-task-group { margin-top: var(--size-4-4); }
 .cw-root .cw-task-group h4 { margin: 0 0 var(--size-4-2); }
 .cw-root .cw-error { color: var(--text-error); white-space: pre-wrap; }

@@ -3,7 +3,7 @@ import { countReadableWords, stripMarkdown } from "../src/metrics/text";
 import { aggregateMetrics } from "../src/metrics/aggregate";
 import { assignedDate, classifyTask, parseTaskLine } from "../src/tasks/parser";
 import { parseScriptMetadata, renderFilenamePattern, withParamDefaults } from "../src/params/parser";
-import { cycleSpan, moveBlock, moveBlockTo } from "../src/workspace/layout";
+import { cycleSpan, moveBlock, moveBlockTo, moveItem } from "../src/workspace/layout";
 import { dailyWordChanges, estimateHistory, upsertSnapshot } from "../src/history/history";
 import { DEFAULT_DATA, mergeSettings, migrateData, type Block } from "../src/types";
 import { activityLevel, aggregateHeatmap, aggregateTopFolders, areaPath, linePathRange, resolveCreatedDate } from "../src/metrics/analytics";
@@ -118,6 +118,11 @@ describe("layout", () => {
     expect(moveBlockTo(blocks, -1, 1)).toEqual(blocks);
   });
   it("cycles all four width options within bounds", () => { expect(cycleSpan(3, 1)).toBe(4); expect(cycleSpan(4, 1)).toBe(6); expect(cycleSpan(12, 1)).toBe(12); });
+  it("reorders button definitions without mutating the source", () => {
+    const values = [{ label: "a" }, { label: "b" }];
+    expect(moveItem(values, 1, -1)).toEqual([{ label: "b" }, { label: "a" }]);
+    expect(values).toEqual([{ label: "a" }, { label: "b" }]);
+  });
 });
 
 describe("history", () => {
@@ -159,7 +164,7 @@ describe("settings migration", () => {
   });
   it("migrates the removed health component into selected vault stats", () => {
     const migrated = migrateData({ workspace: { blocks: [{ id: "health", componentId: "builtin/note-health", span: 6, params: {} }] } });
-    expect(migrated.version).toBe(4); expect(migrated.workspace.blocks[0]).toMatchObject({ componentId: "builtin/vault-stats", params: { items: ["orphans", "empty", "short"] } });
+    expect(migrated.version).toBe(5); expect(migrated.workspace.blocks[0]).toMatchObject({ componentId: "builtin/vault-stats", params: { items: ["orphans", "empty", "short"] } });
   });
   it("removes obsolete graph blocks without disturbing other components", () => {
     const migrated = migrateData({ workspace: { blocks: [{ id: "graph", componentId: "builtin/graph", span: 12, params: {} }, { id: "keep", componentId: "builtin/trends", span: 6, params: {} }] } });
@@ -170,6 +175,15 @@ describe("settings migration", () => {
       { date: "2026-09-22", notes: 10, links: 20, words: 30, estimated: true },
       { date: "2026-09-23", notes: 11, links: 22, words: 33 }
     ] });
-    expect(migrated).toMatchObject({ version: 4, historyInitialized: false, history: [{ date: "2026-09-23", notes: 11, links: 22, words: 33 }] });
+    expect(migrated).toMatchObject({ version: 5, historyInitialized: false, history: [{ date: "2026-09-23", notes: 11, links: 22, words: 33 }] });
+  });
+  it("migrates one legacy quick-create configuration into a button list", () => {
+    const migrated = migrateData({ version: 4, workspace: { blocks: [{ id: "create", componentId: "builtin/quick-create", span: 12, params: {
+      template: "Templates/blank.md", folder: "Inbox", filename: "{{date:YYYY-MM-DD}} {{title}}", title: "空白笔记"
+    } }] } });
+    expect(migrated.version).toBe(5);
+    expect(migrated.workspace.blocks[0].params).toEqual({ buttons: [{
+      label: "快速新建", template: "Templates/blank.md", folder: "Inbox", filename: "{{date:YYYY-MM-DD}} {{title}}", title: "空白笔记"
+    }] });
   });
 });

@@ -90,6 +90,11 @@ var en = {
   "\u8BF7\u9009\u62E9\u547D\u4EE4": "Select a command",
   "\u8981\u786E\u8BA4": "Require confirmation",
   "\u6DFB\u52A0\u6309\u94AE": "Add button",
+  "\u6309\u94AE\u540D\u79F0": "Button label",
+  "\u6A21\u677F\u6587\u4EF6": "Template file",
+  "\u76EE\u6807\u76EE\u5F55": "Destination folder",
+  "\u6587\u4EF6\u540D\u6A21\u5F0F": "Filename pattern",
+  "\u6807\u9898\u53D8\u91CF": "Title variable",
   "\u4EE3\u7801": "Code",
   "\u67E5\u8BE2\u4E0A\u4E0B\u6587\u7B14\u8BB0": "Query context note",
   "\u7559\u7A7A\u65F6\u4F7F\u7528\u5F53\u524D\u6D3B\u52A8\u7B14\u8BB0": "Leave blank to use the active note",
@@ -144,6 +149,7 @@ var en = {
   "\u6E05\u7A7A\u5386\u53F2": "Clear history",
   "\u6E05\u7A7A": "Clear",
   "\u5C1A\u65E0\u547D\u4EE4\u6309\u94AE\uFF0C\u8BF7\u5728\u7F16\u8F91\u6A21\u5F0F\u914D\u7F6E\u3002": "No command buttons yet. Configure them in edit mode.",
+  "\u5C1A\u65E0\u5FEB\u901F\u65B0\u5EFA\u6309\u94AE\uFF0C\u8BF7\u5728\u7F16\u8F91\u6A21\u5F0F\u914D\u7F6E\u3002": "No quick-create buttons yet. Configure them in edit mode.",
   "\u6253\u5F00": "Open",
   "Base \u6587\u4EF6": "Base file",
   "\u8BF7\u9009\u62E9 Base \u6587\u4EF6": "Select a Base file",
@@ -605,7 +611,7 @@ var quickJump = {
     { key: "frontmatterKey", type: "text", defaultValue: "" },
     { key: "frontmatterValue", type: "text", defaultValue: "" }
   ],
-  async render(container, block, _host, plugin) {
+  async render(container, block, host, plugin) {
     const files = plugin.index.recentNotes(paramNumber(block.params.limit, 8), {
       folder: paramString(block.params.folder),
       tag: paramString(block.params.tag),
@@ -618,9 +624,9 @@ var quickJump = {
     }
     for (const file of files) {
       const button = container.createEl("button", { cls: "cw-note-link" });
-      button.createSpan({ text: file.basename });
-      button.createEl("time", { text: moment(file.stat.mtime).format("MM-DD HH:mm") });
-      button.addEventListener("click", () => void plugin.app.workspace.getLeaf(false).openFile(file));
+      button.createSpan({ text: file.basename, cls: "cw-note-link__title" });
+      button.createEl("time", { text: moment(file.stat.mtime).format("MM-DD HH:mm"), cls: "cw-note-link__time" });
+      host.registerDomEvent(button, "click", () => void plugin.app.workspace.getLeaf(false).openFile(file));
     }
   }
 };
@@ -630,7 +636,7 @@ var commandButtons = {
   icon: "command",
   description: "",
   params: [],
-  async render(container, block, _host, plugin) {
+  async render(container, block, host, plugin) {
     if (!plugin.commands.available()) {
       unavailable(container, t("\u547D\u4EE4\u63A5\u53E3\u4E0D\u53EF\u7528"));
       return;
@@ -640,16 +646,17 @@ var commandButtons = {
       container.createDiv({ text: t("\u5C1A\u65E0\u547D\u4EE4\u6309\u94AE\uFF0C\u8BF7\u5728\u7F16\u8F91\u6A21\u5F0F\u914D\u7F6E\u3002"), cls: "cw-empty" });
       return;
     }
-    const wrapper = container.createDiv({ cls: "cw-actions" });
+    const wrapper = container.createDiv({ cls: "cw-actions cw-actions--command" });
     for (const definition of buttons) {
       const command = paramString(definition.command);
       const known = plugin.commands.list().some((item) => item.id === command);
-      const button = wrapper.createEl("button", { text: paramString(definition.label, command), cls: "mod-cta" });
+      const label = paramString(definition.label).trim() || command;
+      const button = wrapper.createEl("button", { text: label, cls: "cw-action-button cw-action-button--command" });
       if (definition.icon) (0, import_obsidian4.setIcon)(button.createSpan({ cls: "cw-button-icon" }), paramString(definition.icon));
       button.disabled = !known;
-      button.addEventListener("click", () => {
+      host.registerDomEvent(button, "click", () => {
         var _a;
-        if (definition.confirm && !((_a = container.ownerDocument.defaultView) == null ? void 0 : _a.confirm(paramString(definition.label, command)))) return;
+        if (definition.confirm && !((_a = container.ownerDocument.defaultView) == null ? void 0 : _a.confirm(label))) return;
         plugin.commands.execute(command);
       });
     }
@@ -660,23 +667,27 @@ var templater = {
   name: "\u5FEB\u901F\u65B0\u5EFA",
   icon: "file-plus",
   description: "",
-  params: [
-    { key: "template", type: "note", defaultValue: "" },
-    { key: "folder", type: "folder", defaultValue: "" },
-    { key: "filename", type: "text", defaultValue: "{{date:YYYY-MM-DD}} {{title}}" },
-    { key: "title", type: "text", defaultValue: "" }
-  ],
-  async render(container, block, _host, plugin) {
+  params: [],
+  async render(container, block, host, plugin) {
     const api = plugin.bridge.templater();
     if (!api) {
       unavailable(container, t("\u9700\u8981 Templater \u63D2\u4EF6"));
       return;
     }
-    const button = container.createEl("button", { text: t("\u5FEB\u901F\u65B0\u5EFA"), cls: "mod-cta" });
-    button.addEventListener("click", () => {
-      const filename = renderFilenamePattern(paramString(block.params.filename, "{{date:YYYY-MM-DD}}"), paramString(block.params.title), (format) => moment().format(format));
-      void api.create_new_note_from_template(paramString(block.params.template), paramString(block.params.folder), filename, true).catch((error) => new import_obsidian4.Notice(error instanceof Error ? error.message : String(error)));
-    });
+    const buttons = Array.isArray(block.params.buttons) ? block.params.buttons : [];
+    if (!buttons.length) {
+      container.createDiv({ text: t("\u5C1A\u65E0\u5FEB\u901F\u65B0\u5EFA\u6309\u94AE\uFF0C\u8BF7\u5728\u7F16\u8F91\u6A21\u5F0F\u914D\u7F6E\u3002"), cls: "cw-empty" });
+      return;
+    }
+    const wrapper = container.createDiv({ cls: "cw-actions cw-actions--create" });
+    for (const definition of buttons) {
+      const label = paramString(definition.label).trim() || t("\u5FEB\u901F\u65B0\u5EFA");
+      const button = wrapper.createEl("button", { text: label, cls: "cw-action-button cw-action-button--create" });
+      host.registerDomEvent(button, "click", () => {
+        const filename = renderFilenamePattern(paramString(definition.filename, "{{date:YYYY-MM-DD}}"), paramString(definition.title), (format) => moment().format(format));
+        void api.create_new_note_from_template(paramString(definition.template), paramString(definition.folder), filename, true).catch((error) => new import_obsidian4.Notice(error instanceof Error ? error.message : String(error)));
+      });
+    }
   }
 };
 var dataview = {
@@ -984,12 +995,15 @@ function unavailable(container, message) {
 }
 
 // src/workspace/layout.ts
-function moveBlock(blocks, index, offset) {
+function moveItem(items, index, offset) {
   const target = index + offset;
-  if (index < 0 || index >= blocks.length || target < 0 || target >= blocks.length) return [...blocks];
-  const next = [...blocks];
+  if (index < 0 || index >= items.length || target < 0 || target >= items.length) return [...items];
+  const next = [...items];
   [next[index], next[target]] = [next[target], next[index]];
   return next;
+}
+function moveBlock(blocks, index, offset) {
+  return moveItem(blocks, index, offset);
 }
 function moveBlockTo(blocks, from, to) {
   if (from < 0 || from >= blocks.length || to < 0 || to >= blocks.length || from === to) return [...blocks];
@@ -1149,6 +1163,10 @@ ${detail}` : detail, cls: "cw-error" });
       this.renderCommandEditor(config, block, refreshPreview);
       return;
     }
+    if (block.componentId === "builtin/quick-create") {
+      this.renderQuickCreateEditor(config, block, refreshPreview);
+      return;
+    }
     if (block.componentId === "builtin/base") {
       this.renderBaseEditor(config, block, refreshPreview);
       return;
@@ -1203,7 +1221,19 @@ ${detail}` : detail, cls: "cw-error" });
           await this.plugin.persist();
           await refreshPreview();
         }));
-        new import_obsidian5.Setting(row).addButton((button) => button.setButtonText(t("\u5220\u9664")).onClick(async () => {
+        new import_obsidian5.Setting(row).addButton((button) => button.setIcon("arrow-up").setTooltip(t("\u4E0A\u79FB")).setDisabled(index === 0).onClick(async () => {
+          values.splice(0, values.length, ...moveItem(values, index, -1));
+          block.params.buttons = values;
+          await this.plugin.persist();
+          await refreshPreview();
+          draw();
+        })).addButton((button) => button.setIcon("arrow-down").setTooltip(t("\u4E0B\u79FB")).setDisabled(index === values.length - 1).onClick(async () => {
+          values.splice(0, values.length, ...moveItem(values, index, 1));
+          block.params.buttons = values;
+          await this.plugin.persist();
+          await refreshPreview();
+          draw();
+        })).addButton((button) => button.setButtonText(t("\u5220\u9664")).onClick(async () => {
           values.splice(index, 1);
           block.params.buttons = values;
           await this.plugin.persist();
@@ -1213,6 +1243,69 @@ ${detail}` : detail, cls: "cw-error" });
       });
       new import_obsidian5.Setting(editor).addButton((button) => button.setButtonText(t("\u6DFB\u52A0\u6309\u94AE")).setCta().onClick(async () => {
         values.push({ label: "", command: "", confirm: false });
+        block.params.buttons = values;
+        await this.plugin.persist();
+        await refreshPreview();
+        draw();
+      }));
+    };
+    draw();
+  }
+  renderQuickCreateEditor(container, block, refreshPreview) {
+    const values = Array.isArray(block.params.buttons) ? block.params.buttons.filter((value) => typeof value === "object" && value !== null && !Array.isArray(value)) : [];
+    const draw = () => {
+      var _a;
+      (_a = container.querySelector(".cw-create-editor")) == null ? void 0 : _a.remove();
+      const editor = container.createDiv({ cls: "cw-create-editor" });
+      values.forEach((value, index) => {
+        const row = editor.createDiv({ cls: "cw-command-editor__row" });
+        new import_obsidian5.Setting(row).setName(t("\u6309\u94AE\u540D\u79F0")).addText((text) => text.setValue(typeof value.label === "string" ? value.label : "").onChange(async (next) => {
+          value.label = next;
+          await this.plugin.persist();
+          await refreshPreview();
+        }));
+        new import_obsidian5.Setting(row).setName(t("\u6A21\u677F\u6587\u4EF6")).addText((text) => text.setValue(typeof value.template === "string" ? value.template : "").onChange(async (next) => {
+          value.template = next;
+          await this.plugin.persist();
+          await refreshPreview();
+        }));
+        new import_obsidian5.Setting(row).setName(t("\u76EE\u6807\u76EE\u5F55")).addText((text) => text.setValue(typeof value.folder === "string" ? value.folder : "").onChange(async (next) => {
+          value.folder = next;
+          await this.plugin.persist();
+          await refreshPreview();
+        }));
+        new import_obsidian5.Setting(row).setName(t("\u6587\u4EF6\u540D\u6A21\u5F0F")).addText((text) => text.setValue(typeof value.filename === "string" ? value.filename : "{{date:YYYY-MM-DD}} {{title}}").onChange(async (next) => {
+          value.filename = next;
+          await this.plugin.persist();
+          await refreshPreview();
+        }));
+        new import_obsidian5.Setting(row).setName(t("\u6807\u9898\u53D8\u91CF")).addText((text) => text.setValue(typeof value.title === "string" ? value.title : "").onChange(async (next) => {
+          value.title = next;
+          await this.plugin.persist();
+          await refreshPreview();
+        }));
+        new import_obsidian5.Setting(row).addButton((button) => button.setIcon("arrow-up").setTooltip(t("\u4E0A\u79FB")).setDisabled(index === 0).onClick(async () => {
+          values.splice(0, values.length, ...moveItem(values, index, -1));
+          block.params.buttons = values;
+          await this.plugin.persist();
+          await refreshPreview();
+          draw();
+        })).addButton((button) => button.setIcon("arrow-down").setTooltip(t("\u4E0B\u79FB")).setDisabled(index === values.length - 1).onClick(async () => {
+          values.splice(0, values.length, ...moveItem(values, index, 1));
+          block.params.buttons = values;
+          await this.plugin.persist();
+          await refreshPreview();
+          draw();
+        })).addButton((button) => button.setButtonText(t("\u5220\u9664")).onClick(async () => {
+          values.splice(index, 1);
+          block.params.buttons = values;
+          await this.plugin.persist();
+          await refreshPreview();
+          draw();
+        }));
+      });
+      new import_obsidian5.Setting(editor).addButton((button) => button.setButtonText(t("\u6DFB\u52A0\u6309\u94AE")).setCta().onClick(async () => {
+        values.push({ label: "", template: "", folder: "", filename: "{{date:YYYY-MM-DD}} {{title}}", title: "" });
         block.params.buttons = values;
         await this.plugin.persist();
         await refreshPreview();
@@ -1387,7 +1480,7 @@ var DEFAULT_SETTINGS = {
   allowScripts: false
 };
 var DEFAULT_DATA = {
-  version: 4,
+  version: 5,
   settings: DEFAULT_SETTINGS,
   workspace: { blocks: [
     { id: "default-stats", componentId: "builtin/vault-stats", span: 12, params: {} },
@@ -1424,7 +1517,7 @@ function migrateData(value) {
   const storedHistory = Array.isArray(value.history) ? value.history.filter(isSnapshot) : [];
   const history = sourceVersion < 4 ? storedHistory.filter((point) => !point.estimated) : storedHistory;
   return {
-    version: 4,
+    version: 5,
     settings: mergeSettings(value.settings),
     workspace,
     history,
@@ -1432,8 +1525,18 @@ function migrateData(value) {
   };
 }
 function migrateBlock(block) {
-  if (block.componentId !== "builtin/note-health") return block;
-  return { ...block, componentId: "builtin/vault-stats", params: { ...block.params, items: ["orphans", "empty", "short"] } };
+  var _a, _b, _c, _d;
+  if (block.componentId === "builtin/note-health") return { ...block, componentId: "builtin/vault-stats", params: { ...block.params, items: ["orphans", "empty", "short"] } };
+  if (block.componentId === "builtin/quick-create" && !Array.isArray(block.params.buttons)) {
+    return { ...block, params: { buttons: [{
+      label: "\u5FEB\u901F\u65B0\u5EFA",
+      template: (_a = block.params.template) != null ? _a : "",
+      folder: (_b = block.params.folder) != null ? _b : "",
+      filename: (_c = block.params.filename) != null ? _c : "{{date:YYYY-MM-DD}} {{title}}",
+      title: (_d = block.params.title) != null ? _d : ""
+    }] } };
+  }
+  return block;
 }
 function isBlock(value) {
   return isRecord(value) && typeof value.id === "string" && typeof value.componentId === "string" && [3, 4, 6, 12].includes(Number(value.span)) && isRecord(value.params);

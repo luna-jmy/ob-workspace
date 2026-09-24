@@ -46,7 +46,7 @@ export const DEFAULT_SETTINGS: WorkspaceSettings = {
 };
 
 export const DEFAULT_DATA: CustomWorkspaceData = {
-  version: 4,
+  version: 5,
   settings: DEFAULT_SETTINGS,
   workspace: { blocks: [
     { id: "default-stats", componentId: "builtin/vault-stats", span: 12, params: {} },
@@ -85,13 +85,17 @@ export function migrateData(value: unknown): CustomWorkspaceData {
   const sourceVersion = typeof value.version === "number" ? value.version : 0;
   const storedHistory = Array.isArray(value.history) ? value.history.filter(isSnapshot) : [];
   const history = sourceVersion < 4 ? storedHistory.filter((point) => !point.estimated) : storedHistory;
-  return { version: 4, settings: mergeSettings(value.settings), workspace, history,
+  return { version: 5, settings: mergeSettings(value.settings), workspace, history,
     historyInitialized: sourceVersion < 4 ? false : typeof value.historyInitialized === "boolean" ? value.historyInitialized : history.length > 0 };
 }
 
 function migrateBlock(block: Block): Block {
-  if (block.componentId !== "builtin/note-health") return block;
-  return { ...block, componentId: "builtin/vault-stats", params: { ...block.params, items: ["orphans", "empty", "short"] } };
+  if (block.componentId === "builtin/note-health") return { ...block, componentId: "builtin/vault-stats", params: { ...block.params, items: ["orphans", "empty", "short"] } };
+  if (block.componentId === "builtin/quick-create" && !Array.isArray(block.params.buttons)) {
+    return { ...block, params: { buttons: [{ label: "快速新建", template: block.params.template ?? "", folder: block.params.folder ?? "",
+      filename: block.params.filename ?? "{{date:YYYY-MM-DD}} {{title}}", title: block.params.title ?? "" }] } };
+  }
+  return block;
 }
 
 function isBlock(value: unknown): value is Block {
