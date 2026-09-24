@@ -36,7 +36,8 @@
 .cw-root .cw-note-link__time { flex: 0 0 auto; white-space: nowrap; }
 .cw-root .cw-task { min-width: 0; display: block; overflow: hidden; overflow-wrap: anywhere; white-space: normal; text-overflow: ellipsis; line-height: var(--line-height-normal); }
 .cw-root .cw-action-button { max-width: 100%; min-width: 0; height: auto; white-space: normal; overflow-wrap: anywhere; }
-.cw-root .cw-action-button--command { color: var(--text-normal); background: var(--background-secondary); border-color: var(--background-modifier-border); }
+.cw-root .cw-action-button--command { color: var(--text-normal); background: var(--background-secondary); border: 1px solid var(--background-modifier-border-hover); }
+.cw-root .cw-action-button--command:hover { background: var(--background-modifier-hover); border-color: var(--text-muted); }
 .cw-root .cw-action-button--create { color: var(--text-on-accent); background: var(--interactive-accent); }
 .cw-root .cw-task-group + .cw-task-group { margin-top: var(--size-4-4); }
 .cw-root .cw-task-group h4 { margin: 0 0 var(--size-4-2); }
