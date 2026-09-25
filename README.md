@@ -23,7 +23,7 @@ Workspace configuration and history are stored in `.obsidian/plugins/custom-work
 
 ## Platform status
 
-The manifest targets desktop and mobile Obsidian without runtime Node or Electron dependencies. Automated type, lint, unit, and production-build checks cover the source only. Windows, macOS, Linux, iOS, Android, pop-out windows, third-party themes, optional integrations, and Obsidian GUI behavior remain unverified until recorded in a test vault.
+Custom Workspace targets both desktop and mobile Obsidian. The code is covered by automated checks, but real-device verification is still limited: Windows, macOS, Linux, iOS, and Android, pop-out windows, third-party themes, and the optional integrations have not each been confirmed on a real device. If something behaves oddly on your setup, please open an issue.
 
 ## Development
 
