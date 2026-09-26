@@ -100,7 +100,6 @@ var en = {
   "\u67E5\u8BE2\u4E0A\u4E0B\u6587\u7B14\u8BB0": "Query context note",
   "\u7559\u7A7A\u65F6\u4F7F\u7528\u5F53\u524D\u6D3B\u52A8\u7B14\u8BB0": "Leave blank to use the active note",
   "\u7B14\u8BB0\u8DEF\u5F84\uFF08\u53EF\u9009\uFF09": "Note path (optional)",
-  "\u8BF7\u8F93\u5165 DataviewJS \u67E5\u8BE2\u4EE3\u7801": "Enter DataviewJS query code",
   "\u8BF7\u8F93\u5165 Dataview \u67E5\u8BE2\u4EE3\u7801": "Enter a Dataview query",
   "\u5F53\u524D Dataview \u7248\u672C\u4E0D\u652F\u6301\u67E5\u8BE2\u6E32\u67D3": "This Dataview version does not support query rendering",
   "\u627E\u4E0D\u5230\u67E5\u8BE2\u4E0A\u4E0B\u6587\u7B14\u8BB0": "Query context note not found",
