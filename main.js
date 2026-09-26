@@ -221,8 +221,11 @@ var CustomWorkspaceSettingTab = class extends import_obsidian2.PluginSettingTab 
     });
     textSetting(this.containerEl, t("\u6392\u9664\u76EE\u5F55"), this.plugin.config.excludedFolders.join(", "), async (value) => {
       this.plugin.config.excludedFolders = value.split(",").map((item) => item.trim()).filter(Boolean);
+      this.plugin.data.history = [];
+      this.plugin.data.historyInitialized = false;
       this.plugin.index.invalidate();
       await this.plugin.persist();
+      this.plugin.refreshViews();
     });
     numberSetting(this.containerEl, t("\u7A7A/\u77ED\u7B14\u8BB0\u9608\u503C"), this.plugin.config.shortNoteThreshold, async (value) => {
       this.plugin.config.shortNoteThreshold = value;

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.6
+
+### Fixed
+
+- Changing the excluded-folders setting now discards and rebuilds the word-count history
+  (estimated and real snapshots) under the new scope — previously the estimated history kept
+  the scope from whenever it was built, producing hundred-thousand-word phantom drops after
+  reconfiguring exclusions post-reinstall.
+
 ## 0.2.5
 
 ### Fixed
