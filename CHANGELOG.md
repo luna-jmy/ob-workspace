@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.2.0
+
+### Breaking: plugin renamed
+
+- **Plugin id `custom-workspace` → `vault-dashboard`, name "Custom Workspace" → "Vault Dashboard"**
+  (an existing community plugin shares the old name, and "workspace" is an official Obsidian
+  concept — this plugin is a vault dashboard). The internal `cw-` CSS prefix and view type are
+  unchanged. **Migration**: remove the old plugin folder in `.obsidian/plugins/custom-workspace/`
+  after updating (BRAT installs the new id); workspace layout resets to defaults — reconfigure
+  once, or copy the old `data.json` to the new folder to keep your layout.
+
+### Added
+
+- **Recent Notes component** ("最近新增"): lists notes created in the last X days (default 30,
+  limit 20), filtered by folder / tag / frontmatter like Quick Jump; creation date prefers
+  frontmatter `created`, falling back to file creation time; click to open.
+- **Dataview component supports plain queries**: code starting with
+  `TABLE / LIST / TASK / CALENDAR / FROM` now renders as a Dataview query
+  (tryQueryMarkdown + MarkdownRenderer); anything else runs as DataviewJS via the official
+  executeJs entry — the same query you use in notes now works in the component.
+
+### Fixed
+
+- Edit mode no longer scrolls back to the top after adding/removing/reordering components.
+- Mobile edit mode: width options hidden (single column anyway), control buttons compacted to
+  stop overflow.
+
 ## 0.1.11
 
 - Resolve Quick Create templates from Templater's configured template folder, accepting paths both with and without the `.md` extension.

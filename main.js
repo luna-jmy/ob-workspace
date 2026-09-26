@@ -101,6 +101,8 @@ var en = {
   "\u7559\u7A7A\u65F6\u4F7F\u7528\u5F53\u524D\u6D3B\u52A8\u7B14\u8BB0": "Leave blank to use the active note",
   "\u7B14\u8BB0\u8DEF\u5F84\uFF08\u53EF\u9009\uFF09": "Note path (optional)",
   "\u8BF7\u8F93\u5165 DataviewJS \u67E5\u8BE2\u4EE3\u7801": "Enter DataviewJS query code",
+  "\u8BF7\u8F93\u5165 Dataview \u67E5\u8BE2\u4EE3\u7801": "Enter a Dataview query",
+  "\u5F53\u524D Dataview \u7248\u672C\u4E0D\u652F\u6301\u67E5\u8BE2\u6E32\u67D3": "This Dataview version does not support query rendering",
   "\u627E\u4E0D\u5230\u67E5\u8BE2\u4E0A\u4E0B\u6587\u7B14\u8BB0": "Query context note not found",
   "\u8BF7\u5728\u7F16\u8F91\u6A21\u5F0F\u914D\u7F6E\u5E76\u8BD5\u8FD0\u884C\u67E5\u8BE2": "Configure and test the query in edit mode",
   "\u8BD5\u8FD0\u884C\u5E76\u4FDD\u5B58": "Test and save",
@@ -722,7 +724,39 @@ var dataview = {
     }
     const configuredSource = paramString(block.params.source);
     const source = configuredSource && plugin.index.find(configuredSource) ? configuredSource : (_b = (_a = plugin.app.workspace.getActiveFile()) == null ? void 0 : _a.path) != null ? _b : "";
-    await api.executeJs(code, container, host, source);
+    await plugin.bridge.renderDataview(code, source, container, host);
+  }
+};
+var recentCreated = {
+  id: "builtin/recent-created",
+  name: "\u6700\u8FD1\u65B0\u589E",
+  icon: "sparkles",
+  description: "",
+  params: [
+    { key: "days", type: "number", defaultValue: 30 },
+    { key: "limit", type: "number", defaultValue: 20 },
+    { key: "folder", type: "folder", defaultValue: "" },
+    { key: "tag", type: "tag", defaultValue: "" },
+    { key: "frontmatterKey", type: "text", defaultValue: "" },
+    { key: "frontmatterValue", type: "text", defaultValue: "" }
+  ],
+  async render(container, block, host, plugin) {
+    const files = plugin.index.recentCreatedNotes(paramNumber(block.params.limit, 20), paramNumber(block.params.days, 30), {
+      folder: paramString(block.params.folder),
+      tag: paramString(block.params.tag),
+      frontmatterKey: paramString(block.params.frontmatterKey),
+      frontmatterValue: paramString(block.params.frontmatterValue)
+    });
+    if (!files.length) {
+      container.createDiv({ text: t("\u6682\u65E0\u5185\u5BB9"), cls: "cw-empty" });
+      return;
+    }
+    for (const { file, created } of files) {
+      const button = container.createEl("button", { cls: "cw-note-link" });
+      button.createSpan({ text: file.basename, cls: "cw-note-link__title" });
+      button.createEl("time", { text: moment(created).format("YYYY-MM-DD HH:mm"), cls: "cw-note-link__time" });
+      host.registerDomEvent(button, "click", () => void plugin.app.workspace.getLeaf(false).openFile(file));
+    }
   }
 };
 var baseView = {
@@ -920,7 +954,7 @@ var todayTasks = {
     await plugin.renderTasks(container, host);
   }
 };
-var BUILTINS = [vaultStats, todayTasks, quickJump, commandButtons, wordsTrend, activityHeatmap, linkTrend, structureAnalysis, templater, baseView, dataview];
+var BUILTINS = [vaultStats, todayTasks, quickJump, recentCreated, commandButtons, wordsTrend, activityHeatmap, linkTrend, structureAnalysis, templater, baseView, dataview];
 function builtinDefinitions() {
   return BUILTINS;
 }
@@ -940,7 +974,8 @@ function componentName(definition) {
     "builtin/structure": t("\u77E5\u8BC6\u5E93\u7ED3\u6784\u5206\u6790"),
     "builtin/quick-create": t("\u5FEB\u901F\u65B0\u5EFA"),
     "builtin/base": t("Base \u89C6\u56FE"),
-    "builtin/dataview": t("Dataview \u67E5\u8BE2")
+    "builtin/dataview": t("Dataview \u67E5\u8BE2"),
+    "builtin/recent-created": t("\u6700\u8FD1\u65B0\u589E")
   };
   return (_a = names[definition.id]) != null ? _a : definition.name;
 }
@@ -965,6 +1000,7 @@ function addParamSetting(parent, definition, block, onChange) {
   var _a, _b;
   const labels = {
     limit: t("\u663E\u793A\u6761\u6570"),
+    days: t("\u6700\u8FD1\u5929\u6570"),
     folder: t("\u76EE\u5F55"),
     tag: t("\u6807\u7B7E"),
     frontmatterKey: t("Frontmatter \u5C5E\u6027\u540D"),
@@ -1031,6 +1067,9 @@ var WorkspaceRenderer = class extends import_obsidian5.Component {
     this.editing = editing;
   }
   async render() {
+    var _a;
+    const scroller = (_a = this.container.closest(".view-content")) != null ? _a : this.container;
+    const scrollTop = scroller.scrollTop;
     if (this.scope) {
       this.removeChild(this.scope);
       this.scope.unload();
@@ -1042,6 +1081,7 @@ var WorkspaceRenderer = class extends import_obsidian5.Component {
     if (this.editing()) this.container.createDiv({ text: t("\u6B63\u5728\u7F16\u8F91\u5DE5\u4F5C\u53F0"), cls: "cw-edit-banner" });
     for (const [index, block] of this.plugin.data.workspace.blocks.entries()) this.renderBlock(block, index, this.scope);
     if (this.editing()) this.renderAdd(this.scope);
+    scroller.scrollTop = scrollTop;
   }
   renderBlock(block, index, scope) {
     var _a, _b;
@@ -1362,13 +1402,12 @@ ${detail}` : detail, cls: "cw-error" });
     new import_obsidian5.Setting(container).addButton((button) => button.setButtonText(t("\u8BD5\u8FD0\u884C\u5E76\u4FDD\u5B58")).setCta().onClick(async () => {
       var _a;
       preview.empty();
-      const api = this.plugin.bridge.dataview();
-      if (!api) {
+      if (!this.plugin.bridge.dataview()) {
         preview.setText(t("\u9700\u8981 Dataview \u63D2\u4EF6"));
         return;
       }
       if (!draft.trim()) {
-        preview.setText(t("\u8BF7\u8F93\u5165 DataviewJS \u67E5\u8BE2\u4EE3\u7801"));
+        preview.setText(t("\u8BF7\u8F93\u5165 Dataview \u67E5\u8BE2\u4EE3\u7801"));
         return;
       }
       if (draftSource && !this.plugin.index.find(draftSource)) {
@@ -1383,7 +1422,7 @@ ${detail}` : detail, cls: "cw-error" });
       scope.addChild(testChild);
       const source = draftSource || ((_a = this.plugin.app.workspace.getActiveFile()) == null ? void 0 : _a.path) || "";
       try {
-        await api.executeJs(draft, preview, testChild, source);
+        await this.plugin.bridge.renderDataview(draft, source, preview, testChild);
         block.params.code = draft;
         block.params.source = draftSource;
         await this.plugin.persist();
@@ -1614,6 +1653,23 @@ var PluginBridge = class {
     const plugin = this.plugins().dataview;
     return typeof ((_a = plugin == null ? void 0 : plugin.api) == null ? void 0 : _a.executeJs) === "function" ? plugin.api : void 0;
   }
+  /**
+   * 按代码形态自动分流：TABLE/LIST/TASK/CALENDAR/FROM 开头是 dataview 查询，
+   * 走 tryQueryMarkdown → MarkdownRenderer（普通 markdown，无需处理器）；
+   * 其余按 DataviewJS 走官方 executeJs。失败抛错，由调用方展示。
+   */
+  async renderDataview(code, source, container, host) {
+    const api = this.dataview();
+    if (!api) throw new Error(t("\u9700\u8981 Dataview \u63D2\u4EF6"));
+    if (/^\s*(TABLE|LIST|TASK|CALENDAR|FROM)\b/i.test(code)) {
+      if (typeof api.tryQueryMarkdown !== "function") throw new Error(t("\u5F53\u524D Dataview \u7248\u672C\u4E0D\u652F\u6301\u67E5\u8BE2\u6E32\u67D3"));
+      const markdown = await api.tryQueryMarkdown(code, source);
+      container.empty();
+      await import_obsidian7.MarkdownRenderer.render(this.app, markdown, container, source, host);
+      return;
+    }
+    await api.executeJs(code, container, host, source);
+  }
   templater() {
     var _a;
     const plugin = this.plugins()["templater-obsidian"];
@@ -1734,6 +1790,28 @@ var VaultIndex = class {
   find(path) {
     const file = this.app.vault.getAbstractFileByPath(path);
     return file instanceof import_obsidian8.TFile ? file : null;
+  }
+  /**
+   * 最近新增笔记：created 取 frontmatter.created（解析失败回退文件 ctime），
+   * 限定最近 days 天内、按 created 倒序、截取 limit 条。支持与快速跳转同款的筛选。
+   */
+  recentCreatedNotes(limit, days, filter = {}) {
+    var _a, _b;
+    const cutoff = Date.now() - Math.max(1, days) * 864e5;
+    const matched = [];
+    for (const file of this.app.vault.getMarkdownFiles()) {
+      if (!this.included(file.path)) continue;
+      const cache = this.app.metadataCache.getFileCache(file);
+      if (!matchesNoteFilter({ path: file.path, tags: cache ? (_a = (0, import_obsidian8.getAllTags)(cache)) != null ? _a : [] : [], frontmatter: cache == null ? void 0 : cache.frontmatter }, filter)) continue;
+      const raw = (_b = cache == null ? void 0 : cache.frontmatter) == null ? void 0 : _b.created;
+      let created = file.stat.ctime;
+      if (typeof raw === "string" || typeof raw === "number") {
+        const parsed = moment(raw).valueOf();
+        if (Number.isFinite(parsed) && parsed > 0) created = parsed;
+      }
+      if (created >= cutoff) matched.push({ file, created });
+    }
+    return matched.sort((a, b) => b.created - a.created).slice(0, Math.max(1, limit));
   }
 };
 
