@@ -1,6 +1,6 @@
 {
   "name": "vault-dashboard",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "An immediately useful, locally rendered Obsidian workspace.",
   "main": "main.js",
   "scripts": {

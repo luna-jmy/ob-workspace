@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.4
+
+### Fixed
+
+- Config panels in narrow cards (third / quarter width): Setting rows now stack vertically
+  (label above, control below, full width) via CSS container queries — field names are fully
+  visible and text inputs no longer overflow. The width selector and compact controls apply
+  per-card at narrow widths, replacing the viewport-only breakpoint.
+
 ## 0.2.3
 
 ### Fixed
