@@ -29,6 +29,22 @@ describe("metric aggregation", () => {
     expect(result).toMatchObject({ notes: 2, attachments: 3, folders: 2, words: 20, links: 2 });
     expect(result.orphanPaths).toEqual(["a.md"]); expect(result.shortPaths).toEqual(["a.md"]);
   });
+  it("最近新增按 frontmatter created 优先，ctime 回退——vault 复制重置 ctime 不再暴涨", () => {
+    const now = new Date(2026, 8, 26, 12).getTime();
+    const weekAgo = new Date(2026, 8, 19).getTime();
+    const result = aggregateMetrics([
+      // created 很旧：即使 ctime 是「刚刚」（复制重置）也不算新增
+      { path: "old-created.md", words: 1, ctime: now, mtime: now, frontmatterCreated: "2024-01-01", outgoing: 0, incoming: 0 },
+      // created 在窗口内：算
+      { path: "fresh.md", words: 1, ctime: now, mtime: now, frontmatterCreated: "2026-09-24", outgoing: 0, incoming: 0 },
+      // 无 created、ctime 在窗口内：回退算
+      { path: "fresh-ctime.md", words: 1, ctime: weekAgo + 3600_000, mtime: weekAgo, outgoing: 0, incoming: 0 },
+      // 无 created、ctime 旧：不算
+      { path: "old.md", words: 1, ctime: new Date(2020, 0, 1).getTime(), mtime: new Date(2020, 0, 1).getTime(), outgoing: 0, incoming: 0 }
+    ], [], [], now, 7, 10);
+    expect(result.recent).toBe(2);
+    expect(result.recentPaths).toEqual(["fresh.md", "fresh-ctime.md"]);
+  });
 });
 
 describe("analytics", () => {
