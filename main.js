@@ -1666,6 +1666,21 @@ var PluginBridge = class {
       const markdown = await api.tryQueryMarkdown(code, source);
       container.empty();
       await import_obsidian7.MarkdownRenderer.render(this.app, markdown, container, source, host);
+      host.registerDomEvent(container, "click", (event) => {
+        var _a;
+        const target = event.target instanceof HTMLElement ? event.target : null;
+        const anchor = target == null ? void 0 : target.closest("a.internal-link");
+        if (!(anchor instanceof HTMLAnchorElement)) return;
+        const href = (_a = anchor.dataset.href) != null ? _a : anchor.getAttribute("href");
+        if (!href) return;
+        event.preventDefault();
+        let path = href;
+        try {
+          path = decodeURIComponent(href);
+        } catch (e) {
+        }
+        void this.app.workspace.openLinkText(path, source, false);
+      });
       return;
     }
     await api.executeJs(code, container, host, source);

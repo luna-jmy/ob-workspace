@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.3
+
+### Fixed
+
+- Note links in Dataview query results are clickable again: statically rendered internal
+  links (`a.internal-link`) now have their own delegated click handler calling
+  `openLinkText` (the MarkdownRenderer static API has no host view to handle them).
+
 ## 0.2.2
 
 ### Fixed
