@@ -16,7 +16,13 @@ export class CustomWorkspaceSettingTab extends PluginSettingTab {
       .setValue(this.plugin.config.autoOpenMode).onChange(async (value) => { this.plugin.config.autoOpenMode = value as "new-tab" | "replace"; await this.plugin.persist(); }));
     textSetting(this.containerEl, t("日志目录"), this.plugin.config.journalFolder, async (value) => { this.plugin.config.journalFolder = value; await this.plugin.persist(); });
     textSetting(this.containerEl, t("日期格式"), this.plugin.config.dateFormat, async (value) => { this.plugin.config.dateFormat = value || "YYYY-MM-DD"; await this.plugin.persist(); });
-    textSetting(this.containerEl, t("排除目录"), this.plugin.config.excludedFolders.join(", "), async (value) => { this.plugin.config.excludedFolders = value.split(",").map((item) => item.trim()).filter(Boolean); this.plugin.index.invalidate(); await this.plugin.persist(); });
+    textSetting(this.containerEl, t("排除目录"), this.plugin.config.excludedFolders.join(", "), async (value) => {
+      this.plugin.config.excludedFolders = value.split(",").map((item) => item.trim()).filter(Boolean);
+      // 排除范围变了，历史快照与估算口径全部失效——整条作废，下次渲染按新口径重建
+      // （否则「昨天=旧口径、今天=新口径」，字数曲线会出现几十万级的假跳变）
+      this.plugin.data.history = []; this.plugin.data.historyInitialized = false;
+      this.plugin.index.invalidate(); await this.plugin.persist(); this.plugin.refreshViews();
+    });
     numberSetting(this.containerEl, t("空/短笔记阈值"), this.plugin.config.shortNoteThreshold, async (value) => { this.plugin.config.shortNoteThreshold = value; this.plugin.index.invalidate(); await this.plugin.persist(); });
     numberSetting(this.containerEl, t("最近天数"), this.plugin.config.recentDays, async (value) => { this.plugin.config.recentDays = value; this.plugin.index.invalidate(); await this.plugin.persist(); });
     new Setting(this.containerEl).setName(t("显示估算历史")).addToggle((toggle) => toggle.setValue(this.plugin.config.showEstimatedHistory).onChange(async (value) => { this.plugin.config.showEstimatedHistory = value; await this.plugin.persist(); this.plugin.refreshViews(); }));
