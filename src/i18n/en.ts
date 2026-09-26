@@ -71,6 +71,8 @@ export const en: Record<string, string> = {
   "留空时使用当前活动笔记": "Leave blank to use the active note",
   "笔记路径（可选）": "Note path (optional)",
   "请输入 DataviewJS 查询代码": "Enter DataviewJS query code",
+  "请输入 Dataview 查询代码": "Enter a Dataview query",
+  "当前 Dataview 版本不支持查询渲染": "This Dataview version does not support query rendering",
   "找不到查询上下文笔记": "Query context note not found",
   "请在编辑模式配置并试运行查询": "Configure and test the query in edit mode",
   "试运行并保存": "Test and save",

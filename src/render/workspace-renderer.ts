@@ -10,6 +10,9 @@ export class WorkspaceRenderer extends Component {
   private draggedIndex?: number;
   constructor(private readonly plugin: CustomWorkspacePlugin, private readonly container: HTMLElement, private readonly editing: () => boolean) { super(); }
   async render(): Promise<void> {
+    // 编辑操作（增删/上移下移/改宽）整页重绘——记住滚动位置，画完恢复，不跳回顶部
+    const scroller = this.container.closest(".view-content") ?? this.container;
+    const scrollTop = scroller.scrollTop;
     if (this.scope) { this.removeChild(this.scope); this.scope.unload(); }
     this.scope = new Component(); this.addChild(this.scope);
     this.container.empty();
@@ -17,6 +20,7 @@ export class WorkspaceRenderer extends Component {
     if (this.editing()) this.container.createDiv({ text: t("正在编辑工作台"), cls: "cw-edit-banner" });
     for (const [index, block] of this.plugin.data.workspace.blocks.entries()) this.renderBlock(block, index, this.scope);
     if (this.editing()) this.renderAdd(this.scope);
+    scroller.scrollTop = scrollTop;
   }
   private renderBlock(block: Block, index: number, scope: Component): void {
     const card = this.container.createDiv({ cls: `cw-block cw-span-${block.span}` });
@@ -187,14 +191,14 @@ export class WorkspaceRenderer extends Component {
     const preview = container.createDiv({ cls: "cw-dataview-preview" });
     let testChild: Component | undefined;
     new Setting(container).addButton((button) => button.setButtonText(t("试运行并保存")).setCta().onClick(async () => {
-      preview.empty(); const api = this.plugin.bridge.dataview();
-      if (!api) { preview.setText(t("需要 Dataview 插件")); return; }
-      if (!draft.trim()) { preview.setText(t("请输入 DataviewJS 查询代码")); return; }
+      preview.empty();
+      if (!this.plugin.bridge.dataview()) { preview.setText(t("需要 Dataview 插件")); return; }
+      if (!draft.trim()) { preview.setText(t("请输入 Dataview 查询代码")); return; }
       if (draftSource && !this.plugin.index.find(draftSource)) { preview.setText(t("找不到查询上下文笔记")); return; }
       if (testChild) { scope.removeChild(testChild); testChild.unload(); }
       testChild = new Component(); scope.addChild(testChild);
       const source = draftSource || this.plugin.app.workspace.getActiveFile()?.path || "";
-      try { await api.executeJs(draft, preview, testChild, source); block.params.code = draft; block.params.source = draftSource; await this.plugin.persist(); await refreshPreview(); preview.createDiv({ text: t("试运行成功，已保存。"), cls: "cw-success" }); }
+      try { await this.plugin.bridge.renderDataview(draft, source, preview, testChild); block.params.code = draft; block.params.source = draftSource; await this.plugin.persist(); await refreshPreview(); preview.createDiv({ text: t("试运行成功，已保存。"), cls: "cw-success" }); }
       catch (error) { preview.createEl("pre", { text: error instanceof Error ? error.message : String(error), cls: "cw-error" }); }
     }));
   }

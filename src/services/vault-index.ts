@@ -3,6 +3,7 @@ import { getAllTags, TFile } from "obsidian";
 import { countReadableWords } from "../metrics/text";
 import { aggregateMetrics, type VaultMetrics } from "../metrics/aggregate";
 import { matchesNoteFilter, type NoteFilter } from "../metrics/note-filter";
+import { moment } from "./date";
 
 export class VaultIndex {
   private metricsPromise?: Promise<VaultMetrics>;
@@ -41,4 +42,25 @@ export class VaultIndex {
       .sort((a, b) => b.stat.mtime - a.stat.mtime).slice(0, limit);
   }
   find(path: string): TFile | null { const file: TAbstractFile | null = this.app.vault.getAbstractFileByPath(path); return file instanceof TFile ? file : null; }
+  /**
+   * 最近新增笔记：created 取 frontmatter.created（解析失败回退文件 ctime），
+   * 限定最近 days 天内、按 created 倒序、截取 limit 条。支持与快速跳转同款的筛选。
+   */
+  recentCreatedNotes(limit: number, days: number, filter: NoteFilter = {}): { file: TFile; created: number }[] {
+    const cutoff = Date.now() - Math.max(1, days) * 86400000;
+    const matched: { file: TFile; created: number }[] = [];
+    for (const file of this.app.vault.getMarkdownFiles()) {
+      if (!this.included(file.path)) continue;
+      const cache = this.app.metadataCache.getFileCache(file);
+      if (!matchesNoteFilter({ path: file.path, tags: cache ? getAllTags(cache) ?? [] : [], frontmatter: cache?.frontmatter }, filter)) continue;
+      const raw: unknown = cache?.frontmatter?.created;
+      let created = file.stat.ctime;
+      if (typeof raw === "string" || typeof raw === "number") {
+        const parsed = moment(raw).valueOf();
+        if (Number.isFinite(parsed) && parsed > 0) created = parsed;
+      }
+      if (created >= cutoff) matched.push({ file, created });
+    }
+    return matched.sort((a, b) => b.created - a.created).slice(0, Math.max(1, limit));
+  }
 }

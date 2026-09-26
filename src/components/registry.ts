@@ -135,7 +135,28 @@ const dataview: ComponentDefinition = {
     if (!code.trim()) { unavailable(container, t("请在编辑模式配置并试运行查询")); return; }
     const configuredSource = paramString(block.params.source);
     const source = configuredSource && plugin.index.find(configuredSource) ? configuredSource : plugin.app.workspace.getActiveFile()?.path ?? "";
-    await api.executeJs(code, container, host, source);
+    await plugin.bridge.renderDataview(code, source, container, host);
+  }
+};
+
+const recentCreated: ComponentDefinition = {
+  id: "builtin/recent-created", name: "最近新增", icon: "sparkles", description: "", params: [
+    { key: "days", type: "number", defaultValue: 30 }, { key: "limit", type: "number", defaultValue: 20 },
+    { key: "folder", type: "folder", defaultValue: "" }, { key: "tag", type: "tag", defaultValue: "" },
+    { key: "frontmatterKey", type: "text", defaultValue: "" }, { key: "frontmatterValue", type: "text", defaultValue: "" }
+  ],
+  async render(container, block, host, plugin) {
+    const files = plugin.index.recentCreatedNotes(paramNumber(block.params.limit, 20), paramNumber(block.params.days, 30), {
+      folder: paramString(block.params.folder), tag: paramString(block.params.tag),
+      frontmatterKey: paramString(block.params.frontmatterKey), frontmatterValue: paramString(block.params.frontmatterValue)
+    });
+    if (!files.length) { container.createDiv({ text: t("暂无内容"), cls: "cw-empty" }); return; }
+    for (const { file, created } of files) {
+      const button = container.createEl("button", { cls: "cw-note-link" });
+      button.createSpan({ text: file.basename, cls: "cw-note-link__title" });
+      button.createEl("time", { text: moment(created).format("YYYY-MM-DD HH:mm"), cls: "cw-note-link__time" });
+      host.registerDomEvent(button, "click", () => void plugin.app.workspace.getLeaf(false).openFile(file));
+    }
   }
 };
 
@@ -254,7 +275,7 @@ const todayTasks: ComponentDefinition = {
   async render(container, _block, host, plugin) { await plugin.renderTasks(container, host); }
 };
 
-const BUILTINS = [vaultStats, todayTasks, quickJump, commandButtons, wordsTrend, activityHeatmap, linkTrend, structureAnalysis, templater, baseView, dataview];
+const BUILTINS = [vaultStats, todayTasks, quickJump, recentCreated, commandButtons, wordsTrend, activityHeatmap, linkTrend, structureAnalysis, templater, baseView, dataview];
 
 export function builtinDefinitions(): ComponentDefinition[] { return BUILTINS; }
 export function builtinById(id: string): ComponentDefinition | undefined { return BUILTINS.find((definition) => definition.id === id); }
@@ -263,7 +284,7 @@ export function componentName(definition: ComponentDefinition): string {
     "builtin/vault-stats": t("仓库统计"), "builtin/today-tasks": t("今日任务"), "builtin/quick-jump": t("快速跳转"),
     "builtin/command-buttons": t("命令按钮"), "builtin/trends": t("每日字数变化"), "builtin/activity-heatmap": t("写作热力图"),
     "builtin/link-trend": t("双链统计图"), "builtin/structure": t("知识库结构分析"), "builtin/quick-create": t("快速新建"), "builtin/base": t("Base 视图"),
-    "builtin/dataview": t("Dataview 查询")
+    "builtin/dataview": t("Dataview 查询"), "builtin/recent-created": t("最近新增")
   };
   return names[definition.id] ?? definition.name;
 }
@@ -279,7 +300,7 @@ export function scriptDefinition(filename: string, name: string, icon: string, d
 
 export function addParamSetting(parent: HTMLElement, definition: ParamDefinition, block: Block, onChange: () => Promise<void>): void {
   const labels: Record<string, string> = {
-    limit: t("显示条数"), folder: t("目录"), tag: t("标签"), frontmatterKey: t("Frontmatter 属性名"),
+    limit: t("显示条数"), days: t("最近天数"), folder: t("目录"), tag: t("标签"), frontmatterKey: t("Frontmatter 属性名"),
     frontmatterValue: t("Frontmatter 属性值"), metric: t("统计方式"), range: t("统计范围")
   };
   const optionLabels: Record<string, string> = { "字数": t("字数"), "新增笔记数": t("新增笔记数") };

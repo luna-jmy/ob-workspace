@@ -1,6 +1,6 @@
-# Custom Workspace
+# Vault Dashboard
 
-Custom Workspace turns an Obsidian vault into an immediately useful home view. It provides local vault statistics, read-only journal tasks, quick note links, writing activity, internal-link trends, top-level folder analysis, command buttons, and optional integrations for Templater, Bases, Dataview, and trusted local scripts.
+Vault Dashboard turns an Obsidian vault into an immediately useful home view. It provides local vault statistics, read-only journal tasks, quick note links, writing activity, internal-link trends, top-level folder analysis, command buttons, and optional integrations for Templater, Bases, Dataview, and trusted local scripts.
 
 ## Usage
 
@@ -23,11 +23,11 @@ None required. All native components — statistics, journal tasks, quick links,
 
 ## Data and backup
 
-Workspace configuration and history are stored in `.obsidian/plugins/custom-workspace/data.json`. Scripts are stored in `.obsidian/plugins/custom-workspace/data/`. These files are outside normal note backups and may be removed when the plugin is uninstalled. Back up the complete plugin directory before moving devices or uninstalling.
+Workspace configuration and history are stored in `.obsidian/plugins/vault-dashboard/data.json`. Scripts are stored in `.obsidian/plugins/vault-dashboard/data/`. These files are outside normal note backups and may be removed when the plugin is uninstalled. Back up the complete plugin directory before moving devices or uninstalling.
 
 ## Platform status
 
-Custom Workspace targets both desktop and mobile Obsidian. The code is covered by automated checks, but real-device verification is still limited: Windows, macOS, Linux, iOS, and Android, pop-out windows, third-party themes, and the optional integrations have not each been confirmed on a real device. If something behaves oddly on your setup, please open an issue.
+Vault Dashboard targets both desktop and mobile Obsidian. The code is covered by automated checks, but real-device verification is still limited: Windows, macOS, Linux, iOS, and Android, pop-out windows, third-party themes, and the optional integrations have not each been confirmed on a real device. If something behaves oddly on your setup, please open an issue.
 
 ## Development
 

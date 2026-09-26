@@ -96,4 +96,13 @@
 .cw-modal-list__item.is-static { background: var(--background-secondary); border-radius: var(--radius-s); }
 .cw-modal-note { margin-top: var(--size-4-2); color: var(--text-muted); }
 .cw-modal-footer { margin-top: var(--size-4-4); display: flex; justify-content: flex-end; }
-@media (max-width: 700px) { .cw-root .cw-block { grid-column: 1 / -1; } .cw-root { padding: var(--size-4-3); } .cw-root .cw-structure__figures { flex-direction: column; gap: 0; text-align: end; } }
+@media (max-width: 700px) {
+  .cw-root .cw-block { grid-column: 1 / -1; }
+  .cw-root { padding: var(--size-4-3); }
+  .cw-root .cw-structure__figures { flex-direction: column; gap: 0; text-align: end; }
+  /* 移动端单列，无宽度模式；编辑控件收紧避免溢出 */
+  .cw-root .cw-width-options { display: none; }
+  .cw-root .cw-block__header { flex-wrap: wrap; }
+  .cw-root .cw-block__controls { gap: 2px; }
+  .cw-root .cw-block__controls button { padding: 2px var(--size-4-1); }
+}
