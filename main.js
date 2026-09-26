@@ -1089,7 +1089,7 @@ var WorkspaceRenderer = class extends import_obsidian5.Component {
     const header = card.createDiv({ cls: "cw-block__header" });
     const title = header.createDiv({ cls: "cw-block__title" });
     if (definition) (0, import_obsidian5.setIcon)(title.createSpan({ cls: "cw-block__icon" }), definition.icon);
-    const titleText = title.createSpan({ text: block.title || (definition ? componentName(definition) : t("\u672A\u77E5\u7EC4\u4EF6")) });
+    const titleText = title.createSpan({ text: block.title || (definition ? componentName(definition) : t("\u672A\u77E5\u7EC4\u4EF6")), cls: "cw-block__name" });
     const body = card.createDiv({ cls: "cw-block__body" });
     body.createDiv({ text: t("\u52A0\u8F7D\u4E2D\u2026"), cls: "cw-loading" });
     let child;

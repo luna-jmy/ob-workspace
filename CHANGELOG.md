@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.1
+
+### Fixed
+
+- Edit-mode header no longer overflows on any width: the header wraps unconditionally, the
+  component title truncates with an ellipsis instead of pushing the control buttons off-screen,
+  and controls align right; the add-component buttons stack full-width on mobile.
+
 ## 0.2.0
 
 ### Breaking: plugin renamed
