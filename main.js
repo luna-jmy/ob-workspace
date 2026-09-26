@@ -1150,9 +1150,10 @@ ${detail}` : detail, cls: "cw-error" });
     button("arrow-up", t("\u4E0A\u79FB"), () => void this.move(index, -1));
     button("arrow-down", t("\u4E0B\u79FB"), () => void this.move(index, 1));
     const widths = controls.createDiv({ cls: "cw-width-options", attr: { "aria-label": t("\u7EC4\u4EF6\u5BBD\u5EA6") } });
-    const widthOptions = [[3, t("\u56DB\u5206\u4E4B\u4E00")], [4, t("\u4E09\u5206\u4E4B\u4E00")], [6, t("\u534A\u884C")], [12, t("\u6574\u884C")]];
-    for (const [span, label] of widthOptions) {
-      const option = widths.createEl("button", { text: label, cls: block.span === span ? "is-active" : "" });
+    const widthOptions = [[3, t("\u56DB\u5206\u4E4B\u4E00"), "25%"], [4, t("\u4E09\u5206\u4E4B\u4E00"), "33%"], [6, t("\u534A\u884C"), "50%"], [12, t("\u6574\u884C"), "100%"]];
+    for (const [span, label, bar] of widthOptions) {
+      const option = widths.createEl("button", { cls: block.span === span ? "is-active" : "", attr: { "aria-label": label, title: label } });
+      option.createSpan({ cls: "cw-width-option__bar", attr: { style: `width:${bar}` } });
       scope.registerDomEvent(option, "click", () => void this.setSpan(block, span));
     }
     button("settings-2", t("\u914D\u7F6E"), () => this.toggleConfig(card, block, params, scope, refreshPreview, titleText, defaultTitle));

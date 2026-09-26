@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.2
+
+### Fixed
+
+- Width selector buttons in edit mode replaced with compact proportional bars
+  (25% / 33% / 50% / 100%) instead of four text labels — no longer squeeze or overflow in
+  quarter- and third-width cards. Applies to every component (the control bar is shared).
+
 ## 0.2.1
 
 ### Fixed
