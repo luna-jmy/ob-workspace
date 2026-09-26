@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.5
+
+### Fixed
+
+- "Recently created" in vault stats now uses frontmatter `created` first (falling back to file
+  ctime only when missing), matching the heatmap and Recent Notes component — copying or
+  syncing a vault resets file ctimes and previously inflated this count into the thousands.
+
 ## 0.2.4
 
 ### Fixed

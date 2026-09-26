@@ -1726,18 +1726,19 @@ function countReadableWords(input) {
 
 // src/metrics/aggregate.ts
 function aggregateMetrics(notes, attachmentPaths, folderPaths, now, recentDays, shortThreshold) {
-  const recentCutoff = now - recentDays * 864e5;
+  const cutoffKey = resolveCreatedDate(void 0, now - Math.max(1, recentDays) * 864e5);
+  const isRecent = (note) => resolveCreatedDate(note.frontmatterCreated, note.ctime) >= cutoffKey;
   return {
     notes: notes.length,
     attachments: attachmentPaths.length,
     folders: folderPaths.length,
-    recent: notes.filter((note) => note.ctime >= recentCutoff).length,
+    recent: notes.filter(isRecent).length,
     words: notes.reduce((sum, note) => sum + note.words, 0),
     links: notes.reduce((sum, note) => sum + note.outgoing, 0),
     notePaths: notes.map((note) => note.path),
     attachmentPaths,
     folderPaths,
-    recentPaths: notes.filter((note) => note.ctime >= recentCutoff).map((note) => note.path),
+    recentPaths: notes.filter(isRecent).map((note) => note.path),
     linkedPaths: notes.filter((note) => note.outgoing > 0).map((note) => note.path),
     orphanPaths: notes.filter((note) => note.outgoing === 0 && note.incoming === 0).map((note) => note.path),
     emptyPaths: notes.filter((note) => note.words === 0).map((note) => note.path),
