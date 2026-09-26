@@ -25,7 +25,23 @@
 .cw-root .cw-block__body, .cw-root .cw-block__config { padding: var(--size-4-4); }
 .cw-root .cw-block__config { border-top: 1px solid var(--background-modifier-border); }
 .cw-root .cw-command-editor__row { margin-bottom: var(--size-4-3); padding: var(--size-4-2); border: 1px solid var(--background-modifier-border); border-radius: var(--radius-s); }
-.cw-root .cw-code-input { width: 100%; min-height: 10rem; resize: vertical; font-family: var(--font-monospace); }
+.cw-root .cw-code-input { width: 100%; max-width: 100%; box-sizing: border-box; min-height: 10rem; resize: vertical; font-family: var(--font-monospace); }
+
+/* 卡片作为容器：窄卡片（三分之一/四分之一/手机）里配置面板的字段名与控件上下排，
+   输入控件占满行宽——视口媒体查询覆盖不了「同屏不同宽卡片」，容器查询可以 */
+.cw-root .cw-block { container-type: inline-size; }
+@container (max-width: 420px) {
+  .cw-block__config .setting-item { flex-direction: column; align-items: stretch; gap: var(--size-2-1); }
+  .cw-block__config .setting-item-info { min-width: 0; }
+  .cw-block__config .setting-item-control { justify-content: flex-start; width: 100%; flex-wrap: wrap; }
+  .cw-block__config .setting-item-control input[type="text"],
+  .cw-block__config .setting-item-control select,
+  .cw-block__config .setting-item-control textarea { width: 100%; min-width: 0; }
+  .cw-block__header { flex-wrap: wrap; }
+  .cw-block__controls { gap: 2px; }
+  .cw-block__controls button { padding: 2px var(--size-4-1); }
+  .cw-width-options { display: none; }
+}
 .cw-root .cw-dataview-preview { margin-top: var(--size-4-3); padding: var(--size-4-2); background: var(--background-secondary); border-radius: var(--radius-s); }
 .cw-root .cw-base-preview { min-width: 0; overflow: auto; }
 .cw-root .cw-success { color: var(--text-success); }
