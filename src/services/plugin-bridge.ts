@@ -31,6 +31,18 @@ export class PluginBridge {
       const markdown = await api.tryQueryMarkdown(code, source);
       container.empty();
       await MarkdownRenderer.render(this.app, markdown, container, source, host);
+      // 静态渲染的内链没有宿主视图接管点击——这里自己处理跳转（data-href 为原始路径）
+      host.registerDomEvent(container, "click", (event) => {
+        const target = event.target instanceof HTMLElement ? event.target : null;
+        const anchor = target?.closest("a.internal-link");
+        if (!(anchor instanceof HTMLAnchorElement)) return;
+        const href = anchor.dataset.href ?? anchor.getAttribute("href");
+        if (!href) return;
+        event.preventDefault();
+        let path = href;
+        try { path = decodeURIComponent(href); } catch { /* 保留原文 */ }
+        void this.app.workspace.openLinkText(path, source, false);
+      });
       return;
     }
     await api.executeJs(code, container, host, source);
