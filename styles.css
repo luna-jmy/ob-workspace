@@ -18,8 +18,10 @@
 .cw-root .cw-block__controls, .cw-root .cw-actions { min-width: 0; display: flex; flex-wrap: wrap; gap: var(--size-4-1); }
 .cw-root .cw-block__controls button { padding: var(--size-4-1); }
 .cw-root .cw-width-options { display: flex; gap: 1px; padding: 1px; border: 1px solid var(--background-modifier-border); border-radius: var(--radius-s); }
-.cw-root .cw-width-options button { height: var(--input-height); padding-inline: var(--size-4-2); font-size: var(--font-ui-smaller); }
-.cw-root .cw-width-options button.is-active { color: var(--text-on-accent); background: var(--interactive-accent); }
+.cw-root .cw-width-options button { width: 1.7rem; height: var(--input-height); display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+.cw-root .cw-width-option__bar { height: 0.55rem; border-radius: 2px; background: var(--text-muted); min-width: 3px; }
+.cw-root .cw-width-options button.is-active .cw-width-option__bar { background: var(--text-on-accent); }
+.cw-root .cw-width-options button.is-active { background: var(--interactive-accent); }
 .cw-root .cw-block__body, .cw-root .cw-block__config { padding: var(--size-4-4); }
 .cw-root .cw-block__config { border-top: 1px solid var(--background-modifier-border); }
 .cw-root .cw-command-editor__row { margin-bottom: var(--size-4-3); padding: var(--size-4-2); border: 1px solid var(--background-modifier-border); border-radius: var(--radius-s); }

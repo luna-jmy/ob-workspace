@@ -61,9 +61,10 @@ export class WorkspaceRenderer extends Component {
     };
     button("arrow-up", t("上移"), () => void this.move(index, -1)); button("arrow-down", t("下移"), () => void this.move(index, 1));
     const widths = controls.createDiv({ cls: "cw-width-options", attr: { "aria-label": t("组件宽度") } });
-    const widthOptions: Array<[BlockSpan, string]> = [[3, t("四分之一")], [4, t("三分之一")], [6, t("半行")], [12, t("整行")]];
-    for (const [span, label] of widthOptions) {
-      const option = widths.createEl("button", { text: label, cls: block.span === span ? "is-active" : "" });
+    const widthOptions: Array<[BlockSpan, string, string]> = [[3, t("四分之一"), "25%"], [4, t("三分之一"), "33%"], [6, t("半行"), "50%"], [12, t("整行"), "100%"]];
+    for (const [span, label, bar] of widthOptions) {
+      const option = widths.createEl("button", { cls: block.span === span ? "is-active" : "", attr: { "aria-label": label, title: label } });
+      option.createSpan({ cls: "cw-width-option__bar", attr: { style: `width:${bar}` } });
       scope.registerDomEvent(option, "click", () => void this.setSpan(block, span));
     }
     button("settings-2", t("配置"), () => this.toggleConfig(card, block, params, scope, refreshPreview, titleText, defaultTitle)); button("trash-2", t("删除"), () => void this.remove(index));
