@@ -6,8 +6,10 @@
 .cw-root .cw-span-3 { grid-column: span 3; }
 .cw-root.is-editing .cw-block { border-color: var(--interactive-accent); }
 .cw-root .cw-edit-banner { grid-column: 1 / -1; padding: var(--size-4-2) var(--size-4-3); color: var(--text-on-accent); background: var(--interactive-accent); border-radius: var(--radius-s); font-weight: var(--font-semibold); }
-.cw-root .cw-block__header { min-height: var(--input-height); padding: var(--size-4-3) var(--size-4-4); display: flex; align-items: center; justify-content: space-between; gap: var(--size-4-2); border-bottom: 1px solid var(--background-modifier-border); }
-.cw-root .cw-block__title { display: flex; align-items: center; gap: var(--size-4-2); font-weight: var(--font-semibold); }
+.cw-root .cw-block__header { min-height: var(--input-height); padding: var(--size-4-3) var(--size-4-4); display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: var(--size-4-2); border-bottom: 1px solid var(--background-modifier-border); }
+.cw-root .cw-block__title { display: flex; align-items: center; gap: var(--size-4-2); font-weight: var(--font-semibold); min-width: 0; flex: 0 1 auto; }
+.cw-root .cw-block__title .cw-block__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cw-root .cw-block__controls { margin-left: auto; }
 .cw-root .cw-drag-handle { cursor: grab; }
 .cw-root .cw-drag-handle:active { cursor: grabbing; }
 .cw-root .cw-block.is-dragging { opacity: 0.45; }
@@ -102,7 +104,7 @@
   .cw-root .cw-structure__figures { flex-direction: column; gap: 0; text-align: end; }
   /* 移动端单列，无宽度模式；编辑控件收紧避免溢出 */
   .cw-root .cw-width-options { display: none; }
-  .cw-root .cw-block__header { flex-wrap: wrap; }
   .cw-root .cw-block__controls { gap: 2px; }
   .cw-root .cw-block__controls button { padding: 2px var(--size-4-1); }
+  .cw-root .cw-add button { display: block; width: 100%; margin: 0 0 var(--size-4-1); }
 }

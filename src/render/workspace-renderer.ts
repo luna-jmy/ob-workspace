@@ -28,7 +28,7 @@ export class WorkspaceRenderer extends Component {
     const header = card.createDiv({ cls: "cw-block__header" });
     const title = header.createDiv({ cls: "cw-block__title" });
     if (definition) setIcon(title.createSpan({ cls: "cw-block__icon" }), definition.icon);
-    const titleText = title.createSpan({ text: block.title || (definition ? componentName(definition) : t("未知组件")) });
+    const titleText = title.createSpan({ text: block.title || (definition ? componentName(definition) : t("未知组件")), cls: "cw-block__name" });
     const body = card.createDiv({ cls: "cw-block__body" }); body.createDiv({ text: t("加载中…"), cls: "cw-loading" });
     let child: Component | undefined;
     let previewGeneration = 0;
