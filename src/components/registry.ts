@@ -1,4 +1,4 @@
-import { Component, MarkdownRenderer, Notice, Setting, setIcon } from "obsidian";
+import { Component, getAllTags, MarkdownRenderer, Notice, Setting, setIcon } from "obsidian";
 import type CustomWorkspacePlugin from "../main";
 import type { Block, ParamValue } from "../types";
 import type { ParamDefinition } from "../params/parser";
@@ -173,6 +173,97 @@ const baseView: ComponentDefinition = {
   }
 };
 
+/** 【】书名 → 《书名》（与 random-quote3.js 同款格式） */
+function formatBookName(fileName: string): string {
+  return `《${fileName.replace(/^【.*?】/, "").trim()}》`;
+}
+
+const randomQuote: ComponentDefinition = {
+  id: "builtin/random-quote", name: "随机书摘", icon: "quote", description: "", params: [
+    { key: "folder", type: "folder", defaultValue: "" }, { key: "tag", type: "tag", defaultValue: "" }
+  ],
+  async render(container, block, host, plugin) {
+    const folder = paramString(block.params.folder).replace(/^\/+|\/+$/g, "");
+    const rawTag = paramString(block.params.tag).replace(/^#/, "");
+    if (!folder || !rawTag) { unavailable(container, t("请在编辑模式配置目录与标签")); return; }
+    const tag = `#${rawTag}`;
+    const wrap = container.createDiv({ cls: "cw-quote" });
+    const draw = async (): Promise<void> => {
+      wrap.empty();
+      const files = plugin.app.vault.getMarkdownFiles().filter((file) => file.path.startsWith(`${folder}/`));
+      const pages = files.filter((file) => {
+        const cache = plugin.app.metadataCache.getFileCache(file);
+        return (cache ? getAllTags(cache) ?? [] : []).some((item) => item.toLocaleLowerCase() === tag.toLocaleLowerCase());
+      });
+      if (!pages.length) { wrap.createDiv({ text: t("暂无书摘可显示"), cls: "cw-empty" }); return; }
+      const page = pages[Math.floor(Math.random() * pages.length)];
+      const text = await plugin.app.vault.cachedRead(page);
+      const lines = text.split("\n").filter((line) => line.includes(tag));
+      if (!lines.length) { wrap.createDiv({ text: t("笔记中没有匹配标签的行"), cls: "cw-empty" }); return; }
+      const raw = lines[Math.floor(Math.random() * lines.length)];
+      const quote = raw.replace(/#[^\s#]+/g, "").replace(/\[.*?::.*?\]/g, "").replace(/^[#\-*\s>]+/, "").replace(/\s{2,}/g, " ").trim() || raw.trim();
+      const source = formatBookName(page.name);
+      const body = wrap.createDiv({ cls: "cw-quote__body" });
+      await MarkdownRenderer.render(plugin.app, `> ${quote}\n>\n> — *${source}*`, body, page.path, host);
+      const tools = wrap.createDiv({ cls: "cw-quote__tools" });
+      const copy = tools.createEl("button", { cls: "cw-quote__btn", attr: { "aria-label": t("复制书摘") } });
+      setIcon(copy, "copy");
+      host.registerDomEvent(copy, "click", () => {
+        void wrap.ownerDocument.defaultView?.navigator.clipboard.writeText(`${quote}\n\n— ${source}`);
+        new Notice(t("已复制到剪贴板"));
+      });
+      const refresh = tools.createEl("button", { cls: "cw-quote__btn", attr: { "aria-label": t("换一条") } });
+      setIcon(refresh, "refresh-cw");
+      host.registerDomEvent(refresh, "click", () => void draw());
+    };
+    await draw();
+  }
+};
+
+interface TimelineEvent { date?: ParamValue; title?: ParamValue; icon?: ParamValue }
+const yearTimeline: ComponentDefinition = {
+  id: "builtin/year-timeline", name: "年度时间线", icon: "timeline", description: "", params: [
+    { key: "year", type: "number", defaultValue: 0 }, { key: "todayIcon", type: "text", defaultValue: "👩‍💻" }
+  ],
+  async render(container, block, _host, _plugin) {
+    const now = new Date();
+    const year = paramNumber(block.params.year, 0) || now.getFullYear();
+    const todayIcon = paramString(block.params.todayIcon, "👩‍💻") || "👩‍💻";
+    const isLeap = (year % 100 === 0) ? year % 400 === 0 : year % 4 === 0;
+    const daysOfYear = isLeap ? 366 : 365;
+    const monthDays = Array.from({ length: 12 }, (_, month) => new Date(year, month + 1, 0).getDate());
+    const dayOf = (date: Date): number => Math.floor((date.getTime() - new Date(year, 0, 0).getTime()) / 86400000);
+    const todayX = year === now.getFullYear() ? dayOf(now) * 10 : null;
+    const todayLabel = year === now.getFullYear() ? `${now.getMonth() + 1}/${now.getDate()}` : String(year);
+
+    const svg = container.createSvg("svg", { cls: "cw-yt", attr: { viewBox: `0 -50 ${daysOfYear * 10} 150`, role: "img", "aria-label": `${t("年度时间线")} ${year}` } });
+    let x = 0;
+    monthDays.forEach((days, month) => {
+      svg.createSvg("rect", { cls: `cw-yt__bar cw-yt__bar--${month % 4}`, attr: { x: String(x), width: String(days * 10), height: "25" } });
+      const label = svg.createSvg("text", { cls: "cw-yt__label", attr: { x: String(x + 8), y: "80" } });
+      label.appendChild(container.ownerDocument.createTextNode(`${year}-${String(month + 1).padStart(2, "0")}`));
+      x += days * 10;
+    });
+    if (todayX !== null) {
+      svg.createSvg("rect", { cls: "cw-yt__today", attr: { x: String(todayX), y: "10", width: "6", height: "15" } }).setAttribute("aria-label", todayLabel);
+      const icon = svg.createSvg("text", { cls: "cw-yt__icon", attr: { x: String(todayX), y: "0", "text-anchor": "middle" } });
+      icon.appendChild(container.ownerDocument.createTextNode(todayIcon));
+    }
+    const events = Array.isArray(block.params.events) ? block.params.events as TimelineEvent[] : [];
+    for (const event of events) {
+      const dateText = paramString(event.date).trim();
+      const match = /^(\d{1,2})[-/](\d{1,2})$/.exec(dateText);
+      if (!match) continue;
+      const date = new Date(year, Number(match[1]) - 1, Number(match[2]));
+      const title = paramString(event.title).trim();
+      const icon = paramString(event.icon).trim() || "🚩";
+      const node = svg.createSvg("text", { cls: "cw-yt__icon cw-yt__event", attr: { x: String(dayOf(date) * 10), y: "-3", "text-anchor": "middle" } });
+      if (title !== "") node.setAttribute("aria-label", title);
+      node.appendChild(container.ownerDocument.createTextNode(icon));
+    }
+  }
+};
+
 const wordsTrend: ComponentDefinition = {
   id: "builtin/trends", name: "每日字数变化", icon: "chart-no-axes-column-increasing", description: "", params: [],
   async render(container, _block, _host, plugin) {
@@ -275,7 +366,7 @@ const todayTasks: ComponentDefinition = {
   async render(container, _block, host, plugin) { await plugin.renderTasks(container, host); }
 };
 
-const BUILTINS = [vaultStats, todayTasks, quickJump, recentCreated, commandButtons, wordsTrend, activityHeatmap, linkTrend, structureAnalysis, templater, baseView, dataview];
+const BUILTINS = [vaultStats, todayTasks, quickJump, recentCreated, commandButtons, wordsTrend, activityHeatmap, linkTrend, structureAnalysis, templater, baseView, dataview, randomQuote, yearTimeline];
 
 export function builtinDefinitions(): ComponentDefinition[] { return BUILTINS; }
 export function builtinById(id: string): ComponentDefinition | undefined { return BUILTINS.find((definition) => definition.id === id); }
@@ -284,7 +375,8 @@ export function componentName(definition: ComponentDefinition): string {
     "builtin/vault-stats": t("仓库统计"), "builtin/today-tasks": t("今日任务"), "builtin/quick-jump": t("快速跳转"),
     "builtin/command-buttons": t("命令按钮"), "builtin/trends": t("每日字数变化"), "builtin/activity-heatmap": t("写作热力图"),
     "builtin/link-trend": t("双链统计图"), "builtin/structure": t("知识库结构分析"), "builtin/quick-create": t("快速新建"), "builtin/base": t("Base 视图"),
-    "builtin/dataview": t("Dataview 查询"), "builtin/recent-created": t("最近新增")
+    "builtin/dataview": t("Dataview 查询"), "builtin/recent-created": t("最近新增"),
+    "builtin/random-quote": t("随机书摘"), "builtin/year-timeline": t("年度时间线")
   };
   return names[definition.id] ?? definition.name;
 }

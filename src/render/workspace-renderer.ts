@@ -107,6 +107,7 @@ export class WorkspaceRenderer extends Component {
     if (block.componentId === "builtin/quick-create") { this.renderQuickCreateEditor(config, block, refreshPreview); return; }
     if (block.componentId === "builtin/base") { this.renderBaseEditor(config, block, refreshPreview); return; }
     if (block.componentId === "builtin/dataview") { this.renderDataviewEditor(config, block, scope, refreshPreview); return; }
+    if (block.componentId === "builtin/year-timeline") { this.renderTimelineEditor(config, block, refreshPreview); return; }
     for (const param of params) addParamSetting(config, param, block, async () => { await this.plugin.persist(); await refreshPreview(); });
   }
   private renderStatsEditor(container: HTMLElement, block: Block, refreshPreview: () => Promise<void>): void {
@@ -210,6 +211,25 @@ export class WorkspaceRenderer extends Component {
       const icon = button.createSpan({ cls: "cw-button-icon" }); setIcon(icon, definition.icon);
       scope.registerDomEvent(button, "click", () => void this.plugin.addBlock(definition));
     }
+  }
+  private renderTimelineEditor(container: HTMLElement, block: Block, refreshPreview: () => Promise<void>): void {
+    const values = Array.isArray(block.params.events) ? block.params.events.filter((value): value is { [key: string]: import("../types").ParamValue } => typeof value === "object" && value !== null && !Array.isArray(value)) : [];
+    const draw = (): void => {
+      container.querySelector(".cw-timeline-editor")?.remove();
+      const editor = container.createDiv({ cls: "cw-timeline-editor" });
+      new Setting(editor).setName(t("年份（0 为今年）")).addText((text) => text.setValue(String(typeof block.params.year === "number" ? block.params.year : 0)).onChange(async (next) => { const parsed = Number(next); block.params.year = Number.isFinite(parsed) ? parsed : 0; await this.plugin.persist(); await refreshPreview(); }));
+      new Setting(editor).setName(t("今天线图标")).addText((text) => text.setValue(typeof block.params.todayIcon === "string" ? block.params.todayIcon : "👩‍💻").onChange(async (next) => { block.params.todayIcon = next; await this.plugin.persist(); await refreshPreview(); }));
+      editor.createEl("h4", { text: t("事件（月-日 + 标题 + 图标）") });
+      values.forEach((value, index) => {
+        const row = editor.createDiv({ cls: "cw-command-editor__row" });
+        new Setting(row).setName(t("日期")).addText((text) => text.setValue(typeof value.date === "string" ? value.date : "").setPlaceholder("05-01").onChange(async (next) => { value.date = next; await this.plugin.persist(); await refreshPreview(); }));
+        new Setting(row).setName(t("标题")).addText((text) => text.setValue(typeof value.title === "string" ? value.title : "").onChange(async (next) => { value.title = next; await this.plugin.persist(); await refreshPreview(); }));
+        new Setting(row).setName(t("图标")).addText((text) => text.setValue(typeof value.icon === "string" ? value.icon : "").setPlaceholder("🚩").onChange(async (next) => { value.icon = next; await this.plugin.persist(); await refreshPreview(); }));
+        new Setting(row).addButton((button) => button.setButtonText(t("删除")).onClick(async () => { values.splice(index, 1); block.params.events = values; await this.plugin.persist(); await refreshPreview(); draw(); }));
+      });
+      new Setting(editor).addButton((button) => button.setButtonText(t("添加事件")).setCta().onClick(async () => { values.push({ date: "", title: "", icon: "🚩" }); block.params.events = values; await this.plugin.persist(); await refreshPreview(); draw(); }));
+    };
+    draw();
   }
   private async move(index: number, offset: -1 | 1): Promise<void> { this.plugin.data.workspace.blocks = moveBlock(this.plugin.data.workspace.blocks, index, offset); await this.persist(); }
   private async moveTo(from: number, to: number): Promise<void> { this.plugin.data.workspace.blocks = moveBlockTo(this.plugin.data.workspace.blocks, from, to); await this.persist(); }

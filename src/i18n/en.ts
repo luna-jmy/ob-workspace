@@ -55,6 +55,8 @@ export const en: Record<string, string> = {
   "配置": "Configure",
   "删除": "Delete",
   "标题": "Title",
+  "日期": "Date",
+  "图标": "Icon",
   "显示名": "Label",
   "命令": "Command",
   "请选择命令": "Select a command",
@@ -136,5 +138,17 @@ export const en: Record<string, string> = {
   "没有匹配笔记": "No matching notes",
   "关闭": "Close",
   "未知组件": "Unknown component",
-  "请输入值": "Enter a value"
+  "请输入值": "Enter a value",
+  "随机书摘": "Random quote",
+  "年度时间线": "Year timeline",
+  "请在编辑模式配置目录与标签": "Configure folder and tag in edit mode",
+  "暂无书摘可显示": "No quotes to show",
+  "笔记中没有匹配标签的行": "No lines with that tag in the note",
+  "复制书摘": "Copy quote",
+  "换一条": "Another one",
+  "已复制到剪贴板": "Copied to clipboard",
+  "年份（0 为今年）": "Year (0 = current)",
+  "今天线图标": "Today-line icon",
+  "事件（月-日 + 标题 + 图标）": "Events (month-day + title + icon)",
+  "添加事件": "Add event"
 };

@@ -126,3 +126,21 @@
   .cw-root .cw-block__controls button { padding: 2px var(--size-4-1); }
   .cw-root .cw-add button { display: block; width: 100%; margin: 0 0 var(--size-4-1); }
 }
+
+/* ── 随机书摘 ── */
+.cw-root .cw-quote__body { border-left: 3px solid var(--background-modifier-border); padding-left: var(--size-4-2); }
+.cw-root .cw-quote__body blockquote { margin: 0; }
+.cw-root .cw-quote__tools { display: flex; justify-content: flex-end; gap: var(--size-2-1); margin-top: var(--size-2-2); }
+.cw-root .cw-quote__btn { display: inline-flex; padding: var(--size-2-1); background: transparent; border: 1px solid var(--background-modifier-border); border-radius: var(--radius-s); color: var(--text-muted); cursor: pointer; }
+.cw-root .cw-quote__btn:hover { color: var(--text-normal); border-color: var(--interactive-accent); }
+
+/* ── 年度时间线 ── */
+.cw-root .cw-yt { width: 100%; height: auto; }
+.cw-root .cw-yt__bar--0 { fill: color-mix(in srgb, var(--interactive-accent) 16%, var(--background-primary)); }
+.cw-root .cw-yt__bar--1 { fill: color-mix(in srgb, var(--interactive-accent) 28%, var(--background-primary)); }
+.cw-root .cw-yt__bar--2 { fill: color-mix(in srgb, var(--interactive-accent) 40%, var(--background-primary)); }
+.cw-root .cw-yt__bar--3 { fill: color-mix(in srgb, var(--interactive-accent) 22%, var(--background-primary)); }
+.cw-root .cw-yt__label { font-size: 42px; fill: var(--text-faint); }
+.cw-root .cw-yt__today { fill: var(--interactive-accent); stroke: var(--text-normal); stroke-width: 1; }
+.cw-root .cw-yt__icon { font-size: 54px; fill: var(--text-normal); }
+.cw-root .cw-yt__event { fill: var(--text-muted); }
