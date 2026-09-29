@@ -239,7 +239,9 @@ const yearTimeline: ComponentDefinition = {
     const svg = container.createSvg("svg", { cls: "cw-yt", attr: { viewBox: `0 -50 ${daysOfYear * 10} 150`, role: "img", "aria-label": `${t("年度时间线")} ${year}` } });
     let x = 0;
     monthDays.forEach((days, month) => {
-      svg.createSvg("rect", { cls: `cw-yt__bar cw-yt__bar--${month % 4}`, attr: { x: String(x), width: String(days * 10), height: "25" } });
+      // createSvg 的 cls 走 classList.add（单 token，不能带空格）——修饰类单独 add
+      const bar = svg.createSvg("rect", { cls: "cw-yt__bar", attr: { x: String(x), width: String(days * 10), height: "25" } });
+      bar.classList.add(`cw-yt__bar--${month % 4}`);
       const label = svg.createSvg("text", { cls: "cw-yt__label", attr: { x: String(x + 8), y: "80" } });
       label.appendChild(container.ownerDocument.createTextNode(`${year}-${String(month + 1).padStart(2, "0")}`));
       x += days * 10;
@@ -257,7 +259,7 @@ const yearTimeline: ComponentDefinition = {
       const date = new Date(year, Number(match[1]) - 1, Number(match[2]));
       const title = paramString(event.title).trim();
       const icon = paramString(event.icon).trim() || "🚩";
-      const node = svg.createSvg("text", { cls: "cw-yt__icon cw-yt__event", attr: { x: String(dayOf(date) * 10), y: "-3", "text-anchor": "middle" } });
+      const node = svg.createSvg("text", { cls: "cw-yt__event", attr: { x: String(dayOf(date) * 10), y: "-3", "text-anchor": "middle" } });
       if (title !== "") node.setAttribute("aria-label", title);
       node.appendChild(container.ownerDocument.createTextNode(icon));
     }

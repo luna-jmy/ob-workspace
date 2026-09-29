@@ -143,4 +143,4 @@
 .cw-root .cw-yt__label { font-size: 42px; fill: var(--text-faint); }
 .cw-root .cw-yt__today { fill: var(--interactive-accent); stroke: var(--text-normal); stroke-width: 1; }
 .cw-root .cw-yt__icon { font-size: 54px; fill: var(--text-normal); }
-.cw-root .cw-yt__event { fill: var(--text-muted); }
+.cw-root .cw-yt__event { fill: var(--text-muted); font-size: 54px; }
