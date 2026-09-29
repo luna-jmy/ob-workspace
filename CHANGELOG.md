@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.1
+
+### Fixed
+
+- Year Timeline component crashed on render: SVG elements were created with a
+  space-separated class list, but `classList.add` only accepts single tokens —
+  now the base class and the modifier are added as separate calls.
+
 ## 1.0.0
 
 - Version alignment: end of the 0.x beta line; first stable release (content as accumulated through 0.2.x).
