@@ -85,6 +85,8 @@ var en = {
   "\u914D\u7F6E": "Configure",
   "\u5220\u9664": "Delete",
   "\u6807\u9898": "Title",
+  "\u65E5\u671F": "Date",
+  "\u56FE\u6807": "Icon",
   "\u663E\u793A\u540D": "Label",
   "\u547D\u4EE4": "Command",
   "\u8BF7\u9009\u62E9\u547D\u4EE4": "Select a command",
@@ -166,7 +168,19 @@ var en = {
   "\u6CA1\u6709\u5339\u914D\u7B14\u8BB0": "No matching notes",
   "\u5173\u95ED": "Close",
   "\u672A\u77E5\u7EC4\u4EF6": "Unknown component",
-  "\u8BF7\u8F93\u5165\u503C": "Enter a value"
+  "\u8BF7\u8F93\u5165\u503C": "Enter a value",
+  "\u968F\u673A\u4E66\u6458": "Random quote",
+  "\u5E74\u5EA6\u65F6\u95F4\u7EBF": "Year timeline",
+  "\u8BF7\u5728\u7F16\u8F91\u6A21\u5F0F\u914D\u7F6E\u76EE\u5F55\u4E0E\u6807\u7B7E": "Configure folder and tag in edit mode",
+  "\u6682\u65E0\u4E66\u6458\u53EF\u663E\u793A": "No quotes to show",
+  "\u7B14\u8BB0\u4E2D\u6CA1\u6709\u5339\u914D\u6807\u7B7E\u7684\u884C": "No lines with that tag in the note",
+  "\u590D\u5236\u4E66\u6458": "Copy quote",
+  "\u6362\u4E00\u6761": "Another one",
+  "\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F": "Copied to clipboard",
+  "\u5E74\u4EFD\uFF080 \u4E3A\u4ECA\u5E74\uFF09": "Year (0 = current)",
+  "\u4ECA\u5929\u7EBF\u56FE\u6807": "Today-line icon",
+  "\u4E8B\u4EF6\uFF08\u6708-\u65E5 + \u6807\u9898 + \u56FE\u6807\uFF09": "Events (month-day + title + icon)",
+  "\u6DFB\u52A0\u4E8B\u4EF6": "Add event"
 };
 
 // src/services/date.ts
@@ -785,6 +799,116 @@ var baseView = {
     host.registerDomEvent(open, "click", () => void plugin.app.workspace.getLeaf(false).openFile(file));
   }
 };
+function formatBookName(fileName) {
+  return `\u300A${fileName.replace(/^【.*?】/, "").trim()}\u300B`;
+}
+var randomQuote = {
+  id: "builtin/random-quote",
+  name: "\u968F\u673A\u4E66\u6458",
+  icon: "quote",
+  description: "",
+  params: [
+    { key: "folder", type: "folder", defaultValue: "" },
+    { key: "tag", type: "tag", defaultValue: "" }
+  ],
+  async render(container, block, host, plugin) {
+    const folder = paramString(block.params.folder).replace(/^\/+|\/+$/g, "");
+    const rawTag = paramString(block.params.tag).replace(/^#/, "");
+    if (!folder || !rawTag) {
+      unavailable(container, t("\u8BF7\u5728\u7F16\u8F91\u6A21\u5F0F\u914D\u7F6E\u76EE\u5F55\u4E0E\u6807\u7B7E"));
+      return;
+    }
+    const tag = `#${rawTag}`;
+    const wrap = container.createDiv({ cls: "cw-quote" });
+    const draw = async () => {
+      wrap.empty();
+      const files = plugin.app.vault.getMarkdownFiles().filter((file) => file.path.startsWith(`${folder}/`));
+      const pages = files.filter((file) => {
+        var _a;
+        const cache = plugin.app.metadataCache.getFileCache(file);
+        return (cache ? (_a = (0, import_obsidian4.getAllTags)(cache)) != null ? _a : [] : []).some((item) => item.toLocaleLowerCase() === tag.toLocaleLowerCase());
+      });
+      if (!pages.length) {
+        wrap.createDiv({ text: t("\u6682\u65E0\u4E66\u6458\u53EF\u663E\u793A"), cls: "cw-empty" });
+        return;
+      }
+      const page = pages[Math.floor(Math.random() * pages.length)];
+      const text = await plugin.app.vault.cachedRead(page);
+      const lines = text.split("\n").filter((line) => line.includes(tag));
+      if (!lines.length) {
+        wrap.createDiv({ text: t("\u7B14\u8BB0\u4E2D\u6CA1\u6709\u5339\u914D\u6807\u7B7E\u7684\u884C"), cls: "cw-empty" });
+        return;
+      }
+      const raw = lines[Math.floor(Math.random() * lines.length)];
+      const quote = raw.replace(/#[^\s#]+/g, "").replace(/\[.*?::.*?\]/g, "").replace(/^[#\-*\s>]+/, "").replace(/\s{2,}/g, " ").trim() || raw.trim();
+      const source = formatBookName(page.name);
+      const body = wrap.createDiv({ cls: "cw-quote__body" });
+      await import_obsidian4.MarkdownRenderer.render(plugin.app, `> ${quote}
+>
+> \u2014 *${source}*`, body, page.path, host);
+      const tools = wrap.createDiv({ cls: "cw-quote__tools" });
+      const copy = tools.createEl("button", { cls: "cw-quote__btn", attr: { "aria-label": t("\u590D\u5236\u4E66\u6458") } });
+      (0, import_obsidian4.setIcon)(copy, "copy");
+      host.registerDomEvent(copy, "click", () => {
+        var _a;
+        void ((_a = wrap.ownerDocument.defaultView) == null ? void 0 : _a.navigator.clipboard.writeText(`${quote}
+
+\u2014 ${source}`));
+        new import_obsidian4.Notice(t("\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F"));
+      });
+      const refresh = tools.createEl("button", { cls: "cw-quote__btn", attr: { "aria-label": t("\u6362\u4E00\u6761") } });
+      (0, import_obsidian4.setIcon)(refresh, "refresh-cw");
+      host.registerDomEvent(refresh, "click", () => void draw());
+    };
+    await draw();
+  }
+};
+var yearTimeline = {
+  id: "builtin/year-timeline",
+  name: "\u5E74\u5EA6\u65F6\u95F4\u7EBF",
+  icon: "timeline",
+  description: "",
+  params: [
+    { key: "year", type: "number", defaultValue: 0 },
+    { key: "todayIcon", type: "text", defaultValue: "\u{1F469}\u200D\u{1F4BB}" }
+  ],
+  async render(container, block, _host, _plugin) {
+    const now = /* @__PURE__ */ new Date();
+    const year = paramNumber(block.params.year, 0) || now.getFullYear();
+    const todayIcon = paramString(block.params.todayIcon, "\u{1F469}\u200D\u{1F4BB}") || "\u{1F469}\u200D\u{1F4BB}";
+    const isLeap = year % 100 === 0 ? year % 400 === 0 : year % 4 === 0;
+    const daysOfYear = isLeap ? 366 : 365;
+    const monthDays = Array.from({ length: 12 }, (_, month) => new Date(year, month + 1, 0).getDate());
+    const dayOf = (date) => Math.floor((date.getTime() - new Date(year, 0, 0).getTime()) / 864e5);
+    const todayX = year === now.getFullYear() ? dayOf(now) * 10 : null;
+    const todayLabel = year === now.getFullYear() ? `${now.getMonth() + 1}/${now.getDate()}` : String(year);
+    const svg = container.createSvg("svg", { cls: "cw-yt", attr: { viewBox: `0 -50 ${daysOfYear * 10} 150`, role: "img", "aria-label": `${t("\u5E74\u5EA6\u65F6\u95F4\u7EBF")} ${year}` } });
+    let x = 0;
+    monthDays.forEach((days, month) => {
+      svg.createSvg("rect", { cls: `cw-yt__bar cw-yt__bar--${month % 4}`, attr: { x: String(x), width: String(days * 10), height: "25" } });
+      const label = svg.createSvg("text", { cls: "cw-yt__label", attr: { x: String(x + 8), y: "80" } });
+      label.appendChild(container.ownerDocument.createTextNode(`${year}-${String(month + 1).padStart(2, "0")}`));
+      x += days * 10;
+    });
+    if (todayX !== null) {
+      svg.createSvg("rect", { cls: "cw-yt__today", attr: { x: String(todayX), y: "10", width: "6", height: "15" } }).setAttribute("aria-label", todayLabel);
+      const icon = svg.createSvg("text", { cls: "cw-yt__icon", attr: { x: String(todayX), y: "0", "text-anchor": "middle" } });
+      icon.appendChild(container.ownerDocument.createTextNode(todayIcon));
+    }
+    const events = Array.isArray(block.params.events) ? block.params.events : [];
+    for (const event of events) {
+      const dateText = paramString(event.date).trim();
+      const match = /^(\d{1,2})[-/](\d{1,2})$/.exec(dateText);
+      if (!match) continue;
+      const date = new Date(year, Number(match[1]) - 1, Number(match[2]));
+      const title = paramString(event.title).trim();
+      const icon = paramString(event.icon).trim() || "\u{1F6A9}";
+      const node = svg.createSvg("text", { cls: "cw-yt__icon cw-yt__event", attr: { x: String(dayOf(date) * 10), y: "-3", "text-anchor": "middle" } });
+      if (title !== "") node.setAttribute("aria-label", title);
+      node.appendChild(container.ownerDocument.createTextNode(icon));
+    }
+  }
+};
 var wordsTrend = {
   id: "builtin/trends",
   name: "\u6BCF\u65E5\u5B57\u6570\u53D8\u5316",
@@ -956,7 +1080,7 @@ var todayTasks = {
     await plugin.renderTasks(container, host);
   }
 };
-var BUILTINS = [vaultStats, todayTasks, quickJump, recentCreated, commandButtons, wordsTrend, activityHeatmap, linkTrend, structureAnalysis, templater, baseView, dataview];
+var BUILTINS = [vaultStats, todayTasks, quickJump, recentCreated, commandButtons, wordsTrend, activityHeatmap, linkTrend, structureAnalysis, templater, baseView, dataview, randomQuote, yearTimeline];
 function builtinDefinitions() {
   return BUILTINS;
 }
@@ -977,7 +1101,9 @@ function componentName(definition) {
     "builtin/quick-create": t("\u5FEB\u901F\u65B0\u5EFA"),
     "builtin/base": t("Base \u89C6\u56FE"),
     "builtin/dataview": t("Dataview \u67E5\u8BE2"),
-    "builtin/recent-created": t("\u6700\u8FD1\u65B0\u589E")
+    "builtin/recent-created": t("\u6700\u8FD1\u65B0\u589E"),
+    "builtin/random-quote": t("\u968F\u673A\u4E66\u6458"),
+    "builtin/year-timeline": t("\u5E74\u5EA6\u65F6\u95F4\u7EBF")
   };
   return (_a = names[definition.id]) != null ? _a : definition.name;
 }
@@ -1227,6 +1353,10 @@ ${detail}` : detail, cls: "cw-error" });
       this.renderDataviewEditor(config, block, scope, refreshPreview);
       return;
     }
+    if (block.componentId === "builtin/year-timeline") {
+      this.renderTimelineEditor(config, block, refreshPreview);
+      return;
+    }
     for (const param of params) addParamSetting(config, param, block, async () => {
       await this.plugin.persist();
       await refreshPreview();
@@ -1445,6 +1575,59 @@ ${detail}` : detail, cls: "cw-error" });
       (0, import_obsidian5.setIcon)(icon, definition.icon);
       scope.registerDomEvent(button, "click", () => void this.plugin.addBlock(definition));
     }
+  }
+  renderTimelineEditor(container, block, refreshPreview) {
+    const values = Array.isArray(block.params.events) ? block.params.events.filter((value) => typeof value === "object" && value !== null && !Array.isArray(value)) : [];
+    const draw = () => {
+      var _a;
+      (_a = container.querySelector(".cw-timeline-editor")) == null ? void 0 : _a.remove();
+      const editor = container.createDiv({ cls: "cw-timeline-editor" });
+      new import_obsidian5.Setting(editor).setName(t("\u5E74\u4EFD\uFF080 \u4E3A\u4ECA\u5E74\uFF09")).addText((text) => text.setValue(String(typeof block.params.year === "number" ? block.params.year : 0)).onChange(async (next) => {
+        const parsed = Number(next);
+        block.params.year = Number.isFinite(parsed) ? parsed : 0;
+        await this.plugin.persist();
+        await refreshPreview();
+      }));
+      new import_obsidian5.Setting(editor).setName(t("\u4ECA\u5929\u7EBF\u56FE\u6807")).addText((text) => text.setValue(typeof block.params.todayIcon === "string" ? block.params.todayIcon : "\u{1F469}\u200D\u{1F4BB}").onChange(async (next) => {
+        block.params.todayIcon = next;
+        await this.plugin.persist();
+        await refreshPreview();
+      }));
+      editor.createEl("h4", { text: t("\u4E8B\u4EF6\uFF08\u6708-\u65E5 + \u6807\u9898 + \u56FE\u6807\uFF09") });
+      values.forEach((value, index) => {
+        const row = editor.createDiv({ cls: "cw-command-editor__row" });
+        new import_obsidian5.Setting(row).setName(t("\u65E5\u671F")).addText((text) => text.setValue(typeof value.date === "string" ? value.date : "").setPlaceholder("05-01").onChange(async (next) => {
+          value.date = next;
+          await this.plugin.persist();
+          await refreshPreview();
+        }));
+        new import_obsidian5.Setting(row).setName(t("\u6807\u9898")).addText((text) => text.setValue(typeof value.title === "string" ? value.title : "").onChange(async (next) => {
+          value.title = next;
+          await this.plugin.persist();
+          await refreshPreview();
+        }));
+        new import_obsidian5.Setting(row).setName(t("\u56FE\u6807")).addText((text) => text.setValue(typeof value.icon === "string" ? value.icon : "").setPlaceholder("\u{1F6A9}").onChange(async (next) => {
+          value.icon = next;
+          await this.plugin.persist();
+          await refreshPreview();
+        }));
+        new import_obsidian5.Setting(row).addButton((button) => button.setButtonText(t("\u5220\u9664")).onClick(async () => {
+          values.splice(index, 1);
+          block.params.events = values;
+          await this.plugin.persist();
+          await refreshPreview();
+          draw();
+        }));
+      });
+      new import_obsidian5.Setting(editor).addButton((button) => button.setButtonText(t("\u6DFB\u52A0\u4E8B\u4EF6")).setCta().onClick(async () => {
+        values.push({ date: "", title: "", icon: "\u{1F6A9}" });
+        block.params.events = values;
+        await this.plugin.persist();
+        await refreshPreview();
+        draw();
+      }));
+    };
+    draw();
   }
   async move(index, offset) {
     this.plugin.data.workspace.blocks = moveBlock(this.plugin.data.workspace.blocks, index, offset);

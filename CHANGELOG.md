@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.0
+
+- Version alignment: end of the 0.x beta line; first stable release (content as accumulated through 0.2.x).
+
 ## 0.2.6
 
 ### Fixed
