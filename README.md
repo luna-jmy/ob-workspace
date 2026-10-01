@@ -2,6 +2,8 @@
 
 Vault Dashboard turns an Obsidian vault into an immediately useful home view. It provides local vault statistics, read-only journal tasks, quick note links, writing activity, internal-link trends, top-level folder analysis, command buttons, and optional integrations for Templater, Bases, Dataview, and trusted local scripts.
 
+Documentation: <https://luna-jmy.github.io/ob-plugin-docs/en/vault-dashboard/>
+
 ## Usage
 
 Enable the plugin, then use the ribbon icon or **Open workspace** command. Choose **Edit mode** in the view toolbar to add, remove, reorder, resize, and configure component instances. Changes are saved immediately.
