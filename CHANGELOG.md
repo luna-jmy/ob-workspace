@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.0.2
+
+### Changed
+
+- Random Quote renders much faster: candidates are collected by walking only
+  the configured folder's subtree (instead of filtering the whole vault), tag
+  matching reuses the shared note filter (no repeated locale lowercasing in
+  the hot loop), the quote block is built directly as DOM instead of going
+  through the full Markdown render pipeline, and "Another one" no longer
+  rescans the folder.
+- Inline Markdown inside a quote line is now shown literally — quotes render
+  as plain text.
+
 ## 1.0.1
 
 ### Fixed
