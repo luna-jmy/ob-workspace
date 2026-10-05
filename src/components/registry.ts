@@ -1,4 +1,4 @@
-import { Component, getAllTags, MarkdownRenderer, Notice, Setting, setIcon } from "obsidian";
+import { Component, getAllTags, MarkdownRenderer, Notice, Setting, setIcon, TAbstractFile, TFile, TFolder } from "obsidian";
 import type CustomWorkspacePlugin from "../main";
 import type { Block, ParamValue } from "../types";
 import type { ParamDefinition } from "../params/parser";
@@ -8,6 +8,8 @@ import { runScript } from "../services/script-runner";
 import { moment } from "../services/date";
 import { DetailModal } from "../ui/detail-modal";
 import { activityLevel, areaPath, linePathRange } from "../metrics/analytics";
+import { matchesNoteFilter } from "../metrics/note-filter";
+import { cleanQuoteText, formatBookName, matchingQuoteLines, randomOf } from "../quotes/parser";
 import { svgClasses } from "../ui/classes";
 import { dailyWordChanges } from "../history/history";
 
@@ -173,11 +175,6 @@ const baseView: ComponentDefinition = {
   }
 };
 
-/** 【】书名 → 《书名》（与 random-quote3.js 同款格式） */
-function formatBookName(fileName: string): string {
-  return `《${fileName.replace(/^【.*?】/, "").trim()}》`;
-}
-
 const randomQuote: ComponentDefinition = {
   id: "builtin/random-quote", name: "随机书摘", icon: "quote", description: "", params: [
     { key: "folder", type: "folder", defaultValue: "" }, { key: "tag", type: "tag", defaultValue: "" }
@@ -188,23 +185,34 @@ const randomQuote: ComponentDefinition = {
     if (!folder || !rawTag) { unavailable(container, t("请在编辑模式配置目录与标签")); return; }
     const tag = `#${rawTag}`;
     const wrap = container.createDiv({ cls: "cw-quote" });
+    // 只遍历所设目录的子树（不整库前缀过滤）；标签匹配复用 note-filter，
+    // 候选在本次渲染内缓存——「换一条」不重扫；文件增删改由全局刷新重建预览、天然失效
+    const root = plugin.app.vault.getAbstractFileByPath(folder);
+    const pages: TFile[] = [];
+    const stack: TAbstractFile[] = root instanceof TFolder ? [root] : [];
+    while (stack.length) {
+      const node = stack.pop();
+      if (!node) continue;
+      if (node instanceof TFolder) { stack.push(...node.children); continue; }
+      if (!(node instanceof TFile) || node.extension !== "md") continue;
+      const cache = plugin.app.metadataCache.getFileCache(node);
+      if (matchesNoteFilter({ path: node.path, tags: cache ? getAllTags(cache) ?? [] : [], frontmatter: cache?.frontmatter }, { tag: rawTag })) pages.push(node);
+    }
     const draw = async (): Promise<void> => {
       wrap.empty();
-      const files = plugin.app.vault.getMarkdownFiles().filter((file) => file.path.startsWith(`${folder}/`));
-      const pages = files.filter((file) => {
-        const cache = plugin.app.metadataCache.getFileCache(file);
-        return (cache ? getAllTags(cache) ?? [] : []).some((item) => item.toLocaleLowerCase() === tag.toLocaleLowerCase());
-      });
-      if (!pages.length) { wrap.createDiv({ text: t("暂无书摘可显示"), cls: "cw-empty" }); return; }
-      const page = pages[Math.floor(Math.random() * pages.length)];
-      const text = await plugin.app.vault.cachedRead(page);
-      const lines = text.split("\n").filter((line) => line.includes(tag));
-      if (!lines.length) { wrap.createDiv({ text: t("笔记中没有匹配标签的行"), cls: "cw-empty" }); return; }
-      const raw = lines[Math.floor(Math.random() * lines.length)];
-      const quote = raw.replace(/#[^\s#]+/g, "").replace(/\[.*?::.*?\]/g, "").replace(/^[#\-*\s>]+/, "").replace(/\s{2,}/g, " ").trim() || raw.trim();
+      const page = randomOf(pages);
+      if (!page) { wrap.createDiv({ text: t("暂无书摘可显示"), cls: "cw-empty" }); return; }
+      const raw = randomOf(matchingQuoteLines(await plugin.app.vault.cachedRead(page), tag));
+      if (!raw) { wrap.createDiv({ text: t("笔记中没有匹配标签的行"), cls: "cw-empty" }); return; }
+      const quote = cleanQuoteText(raw);
       const source = formatBookName(page.name);
+      // 固定模板直建 DOM（blockquote > p + p>em），不走 MarkdownRenderer 管线——那是每轮重绘的主要开销
       const body = wrap.createDiv({ cls: "cw-quote__body" });
-      await MarkdownRenderer.render(plugin.app, `> ${quote}\n>\n> — *${source}*`, body, page.path, host);
+      const quoteBlock = body.createEl("blockquote");
+      quoteBlock.createEl("p", { text: quote });
+      const sourceLine = quoteBlock.createEl("p");
+      sourceLine.appendText("— ");
+      sourceLine.createEl("em", { text: source });
       const tools = wrap.createDiv({ cls: "cw-quote__tools" });
       const copy = tools.createEl("button", { cls: "cw-quote__btn", attr: { "aria-label": t("复制书摘") } });
       setIcon(copy, "copy");

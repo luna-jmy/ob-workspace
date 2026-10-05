@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { countReadableWords, stripMarkdown } from "../src/metrics/text";
 import { aggregateMetrics } from "../src/metrics/aggregate";
 import { assignedDate, classifyTask, parseTaskLine } from "../src/tasks/parser";
@@ -9,6 +9,7 @@ import { DEFAULT_DATA, mergeSettings, migrateData, type Block } from "../src/typ
 import { activityLevel, aggregateHeatmap, aggregateTopFolders, areaPath, linePathRange, resolveCreatedDate } from "../src/metrics/analytics";
 import { svgClasses } from "../src/ui/classes";
 import { filterNotePaths, matchesNoteFilter } from "../src/metrics/note-filter";
+import { cleanQuoteText, formatBookName, matchingQuoteLines, randomOf } from "../src/quotes/parser";
 import { templatePathCandidates } from "../src/params/template-path";
 
 describe("markdown text metrics", () => {
@@ -213,5 +214,26 @@ describe("settings migration", () => {
     expect(migrated.workspace.blocks[0].params).toEqual({ buttons: [{
       label: "快速新建", template: "Templates/blank.md", folder: "Inbox", filename: "{{date:YYYY-MM-DD}} {{title}}", title: "空白笔记"
     }] });
+  });
+});
+
+describe("random quote parsing", () => {
+  it("keeps only lines carrying the tag and tolerates CRLF", () => {
+    const text = "前言行\r\n一句书摘 #金句\r\n别的行\n另一句 #金句 #书摘";
+    expect(matchingQuoteLines(text, "#金句")).toEqual(["一句书摘 #金句", "另一句 #金句 #书摘"]);
+    expect(matchingQuoteLines(text, "")).toEqual([]);
+  });
+  it("strips tags, inline fields and markers, falling back to the raw line when emptied", () => {
+    expect(cleanQuoteText("- > 星星发光 #金句 [位置:: p.12]  是为了    让每个人找到自己的星")).toBe("星星发光 是为了 让每个人找到自己的星");
+    expect(cleanQuoteText("#金句 [note:: x]")).toBe("#金句 [note:: x]");
+  });
+  it("formats 【作者】书名 into 《书名》", () => {
+    expect(formatBookName("【圣埃克苏佩里】小王子")).toBe("《小王子》");
+    expect(formatBookName("小王子")).toBe("《小王子》");
+  });
+  it("picks uniformly and returns undefined for empty input", () => {
+    expect(randomOf([])).toBeUndefined();
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.99);
+    try { expect(randomOf(["a", "b", "c"])).toBe("c"); } finally { randomSpy.mockRestore(); }
   });
 });
