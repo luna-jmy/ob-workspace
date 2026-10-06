@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.0.3
+
+### Fixed
+
+- Long notes are no longer miscounted as short notes. Two hazards in the word
+  counter each swallowed whole bodies: the frontmatter regex, once its
+  delimiter pairing failed (a UTF-8 BOM prefix, a `----` closer, a YAML `...`
+  closer), paired the frontmatter's `---` with a `---` separator in the body
+  and deleted everything in between; and every line indented by a tab or four
+  spaces was treated as indented code — exactly how nested list items are
+  indented, so an all-list note kept only its top-level labels. Frontmatter is
+  now cut at the metadata cache's authoritative offsets (with a
+  first-line-anchored fallback that never pairs a separator), and indented
+  list content counts as words. Unfenced indented code now counts too — the
+  safer direction when a count has to be wrong.
+
 ## 1.0.2
 
 ### Changed
