@@ -22,9 +22,12 @@ export class VaultIndex {
     const notes = await Promise.all(markdown.map(async (file) => {
       const cache = this.app.metadataCache.getFileCache(file);
       const frontmatter: Record<string, unknown> | undefined = cache?.frontmatter;
+      // frontmatter 边界以 metadataCache 为准（文本正则对 BOM / 结束符手误只能兜底，见 text.ts）
+      const raw = await this.app.vault.cachedRead(file);
+      const body = cache?.frontmatterPosition ? raw.slice(cache.frontmatterPosition.end.offset) : raw;
       return {
         path: file.path, ctime: file.stat.ctime, mtime: file.stat.mtime, frontmatterCreated: frontmatter?.created,
-        words: countReadableWords(await this.app.vault.cachedRead(file)),
+        words: countReadableWords(body),
         outgoing: Object.values(resolved[file.path] ?? {}).reduce((sum, count) => sum + count, 0), incoming: incoming.get(file.path) ?? 0
       };
     }));

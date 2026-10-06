@@ -136,7 +136,10 @@ export default class CustomWorkspacePlugin extends Plugin {
       const files = this.app.vault.getMarkdownFiles().filter((file) => !this.config.excludedFolders.some((folder) => file.path === folder || file.path.startsWith(`${folder}/`)));
       const notes = await Promise.all(files.map(async (file) => {
         const cache = this.app.metadataCache.getFileCache(file);
-        return { created: resolveCreatedDate(cache?.frontmatter?.created, file.stat.ctime), words: countReadableWords(await this.app.vault.cachedRead(file)),
+        // frontmatter 边界以 metadataCache 为准（文本正则对 BOM / 结束符手误只能兜底，见 text.ts）
+        const raw = await this.app.vault.cachedRead(file);
+        const body = cache?.frontmatterPosition ? raw.slice(cache.frontmatterPosition.end.offset) : raw;
+        return { created: resolveCreatedDate(cache?.frontmatter?.created, file.stat.ctime), words: countReadableWords(body),
           links: Object.values(this.app.metadataCache.resolvedLinks[file.path] ?? {}).reduce((sum, value) => sum + value, 0) };
       }));
       const actual = this.data.history.filter((point) => !point.estimated); const actualDates = new Set(actual.map((point) => point.date));
