@@ -134,6 +134,7 @@ var en = {
   "\u547D\u4EE4\u63A5\u53E3\u4E0D\u53EF\u7528": "Command interface unavailable",
   "\u5DF2\u5728\u8BBE\u7F6E\u91CC\u5173\u95ED\u811A\u672C\u6267\u884C": "Script execution is disabled in settings",
   "\u754C\u9762\u8BED\u8A00": "Interface language",
+  "\u547D\u4EE4\u4E0E\u4FA7\u680F\u56FE\u6807\u540D\u79F0\u9700\u91CD\u8F7D\u63D2\u4EF6\uFF08\u7981\u7528\u518D\u542F\u7528\uFF09\u540E\u751F\u6548": "Command and sidebar-icon names take effect after reloading the plugin (disable and re-enable)",
   "\u8DDF\u968F Obsidian": "Follow Obsidian",
   "\u4E2D\u6587": "Chinese",
   "\u82F1\u6587": "English",
@@ -212,7 +213,7 @@ var CustomWorkspaceSettingTab = class extends import_obsidian2.PluginSettingTab 
   }
   display() {
     this.containerEl.empty();
-    new import_obsidian2.Setting(this.containerEl).setName(t("\u754C\u9762\u8BED\u8A00")).addDropdown((dropdown) => dropdown.addOption("auto", t("\u8DDF\u968F Obsidian")).addOption("zh", t("\u4E2D\u6587")).addOption("en", t("\u82F1\u6587")).setValue(this.plugin.config.language).onChange(async (value) => {
+    new import_obsidian2.Setting(this.containerEl).setName(t("\u754C\u9762\u8BED\u8A00")).setDesc(`<span style="color: var(--text-error)">${t("\u547D\u4EE4\u4E0E\u4FA7\u680F\u56FE\u6807\u540D\u79F0\u9700\u91CD\u8F7D\u63D2\u4EF6\uFF08\u7981\u7528\u518D\u542F\u7528\uFF09\u540E\u751F\u6548")}</span>`).addDropdown((dropdown) => dropdown.addOption("auto", t("\u8DDF\u968F Obsidian")).addOption("zh", t("\u4E2D\u6587")).addOption("en", t("\u82F1\u6587")).setValue(this.plugin.config.language).onChange(async (value) => {
       this.plugin.config.language = value;
       setLanguage(this.plugin.config.language);
       await this.plugin.persist();
@@ -1740,6 +1741,8 @@ var CustomWorkspaceView = class extends import_obsidian6.ItemView {
   }
   async refresh() {
     var _a;
+    this.contentEl.toggleClass("cw-density-compact", this.plugin.config.density === "compact");
+    this.contentEl.toggleClass("cw-density-comfortable", this.plugin.config.density === "comfortable");
     await ((_a = this.renderer) == null ? void 0 : _a.render());
   }
   async refreshWorkspace() {

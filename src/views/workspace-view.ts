@@ -21,7 +21,12 @@ export class CustomWorkspaceView extends ItemView {
     await this.renderer.render();
   }
   async onClose(): Promise<void> { this.renderer = undefined; this.modeAction = undefined; this.contentEl.empty(); }
-  async refresh(): Promise<void> { await this.renderer?.render(); }
+  async refresh(): Promise<void> {
+    // 密度在设置里改后实时生效：刷新时同步根容器 class（此前只在 onOpen 设一次，改密度要重开视图）
+    this.contentEl.toggleClass("cw-density-compact", this.plugin.config.density === "compact");
+    this.contentEl.toggleClass("cw-density-comfortable", this.plugin.config.density === "comfortable");
+    await this.renderer?.render();
+  }
   private async refreshWorkspace(): Promise<void> { this.plugin.index.invalidate(); await this.plugin.reloadScripts(); await this.refresh(); }
   toggleEditing(): void { this.editing = !this.editing; this.updateModeAction(); void this.refresh(); }
   private updateModeAction(): void {

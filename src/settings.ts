@@ -6,7 +6,7 @@ export class CustomWorkspaceSettingTab extends PluginSettingTab {
   constructor(app: App, private readonly plugin: CustomWorkspacePlugin) { super(app, plugin); }
   display(): void {
     this.containerEl.empty();
-    new Setting(this.containerEl).setName(t("界面语言")).addDropdown((dropdown) => dropdown
+    new Setting(this.containerEl).setName(t("界面语言")).setDesc(`<span style="color: var(--text-error)">${t("命令与侧栏图标名称需重载插件（禁用再启用）后生效")}</span>`).addDropdown((dropdown) => dropdown
       .addOption("auto", t("跟随 Obsidian")).addOption("zh", t("中文")).addOption("en", t("英文"))
       .setValue(this.plugin.config.language).onChange(async (value) => { this.plugin.config.language = value as "auto" | "zh" | "en"; setLanguage(this.plugin.config.language); await this.plugin.persist(); this.display(); }));
     new Setting(this.containerEl).setName(t("排版密度")).addDropdown((dropdown) => dropdown.addOption("comfortable", t("宽松")).addOption("compact", t("紧凑"))

@@ -104,6 +104,7 @@ export const en: Record<string, string> = {
   "命令接口不可用": "Command interface unavailable",
   "已在设置里关闭脚本执行": "Script execution is disabled in settings",
   "界面语言": "Interface language",
+  "命令与侧栏图标名称需重载插件（禁用再启用）后生效": "Command and sidebar-icon names take effect after reloading the plugin (disable and re-enable)",
   "跟随 Obsidian": "Follow Obsidian",
   "中文": "Chinese",
   "英文": "English",
