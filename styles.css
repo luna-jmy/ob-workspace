@@ -24,9 +24,9 @@
 .cw-root .cw-width-options button.is-active { background: var(--interactive-accent); }
 .cw-root .cw-block__body, .cw-root .cw-block__config { padding: var(--size-4-4); }
 .cw-root .cw-block__config { border-top: 1px solid var(--background-modifier-border); }
-/* 配置面板紧凑化：压缩默认 setting-item 的大内边距（组件级行——标题、添加按钮——背景沿用主题） */
-.cw-root .cw-block__config .setting-item { padding: var(--size-4-1) 0; }
-/* 条目盒内的字段行（显示名/命令/确认等）不设背景，与组件级设置行区分 */
+/* 配置面板紧凑化：仅条目盒内的字段行压缩内边距并去背景；
+   组件级行（标题、添加按钮等带主题背景的）完全沿用主题样式——
+   动它们的 padding 会让内容溢出主题画的背景框 */
 .cw-root .cw-block__config .cw-command-editor__row .setting-item { padding: var(--size-4-1) 0; background: transparent; }
 /* 每个条目保留独立边框盒，盒内行距紧凑 */
 .cw-root .cw-command-editor__row { margin-bottom: var(--size-4-2); padding: var(--size-4-2); border: 1px solid var(--background-modifier-border); border-radius: var(--radius-s); }
