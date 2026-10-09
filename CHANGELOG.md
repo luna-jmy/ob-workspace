@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.1.1
+
+### Added
+
+- Vault stats gains an eleventh metric, **Orphan attachments**: non-note files
+  not referenced by any Markdown note. References follow the same rules as
+  broken links (body wiki / Markdown links, embeds, frontmatter properties);
+  usage inside canvas or Base files doesn't count. Click to drill down.
+
+### Changed
+
+- Changing the layout-density setting now applies to open views immediately.
+- The language setting carries a red note: command and sidebar-icon names take
+  effect after reloading the plugin.
+
 ## 1.1.0
 
 ### Added
