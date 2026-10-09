@@ -24,8 +24,10 @@
 .cw-root .cw-width-options button.is-active { background: var(--interactive-accent); }
 .cw-root .cw-block__body, .cw-root .cw-block__config { padding: var(--size-4-4); }
 .cw-root .cw-block__config { border-top: 1px solid var(--background-modifier-border); }
-/* 配置面板紧凑化：压缩默认 setting-item 的大内边距（背景色沿用主题默认） */
+/* 配置面板紧凑化：压缩默认 setting-item 的大内边距（组件级行——标题、添加按钮——背景沿用主题） */
 .cw-root .cw-block__config .setting-item { padding: var(--size-4-1) 0; }
+/* 条目盒内的字段行（显示名/命令/确认等）不设背景，与组件级设置行区分 */
+.cw-root .cw-block__config .cw-command-editor__row .setting-item { padding: var(--size-4-1) 0; background: transparent; }
 /* 每个条目保留独立边框盒，盒内行距紧凑 */
 .cw-root .cw-command-editor__row { margin-bottom: var(--size-4-2); padding: var(--size-4-2); border: 1px solid var(--background-modifier-border); border-radius: var(--radius-s); }
 .cw-root .cw-editor-add { margin-top: var(--size-4-2); padding-top: var(--size-4-2); border-top: 1px solid var(--background-modifier-border); }
