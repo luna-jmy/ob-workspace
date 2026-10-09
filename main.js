@@ -55,6 +55,7 @@ var en = {
   "\u53EF\u8BFB\u5B57\u6570": "Readable words",
   "\u94FE\u63A5": "Links",
   "\u5B64\u7ACB\u7B14\u8BB0": "Orphan notes",
+  "\u5B64\u7ACB\u9644\u4EF6": "Orphan attachments",
   "\u5931\u6548\u94FE\u63A5": "Broken links",
   "\u7A7A\u7B14\u8BB0": "Empty notes",
   "\u77ED\u7B14\u8BB0": "Short notes",
@@ -603,8 +604,8 @@ function paramNumber(value, fallback) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
 }
-var STAT_KEYS = ["notes", "attachments", "folders", "recent", "words", "links", "orphans", "broken", "empty", "short"];
-var DEFAULT_STAT_KEYS = ["notes", "attachments", "folders", "recent", "words", "links", "orphans", "broken", "empty"];
+var STAT_KEYS = ["notes", "attachments", "folders", "recent", "words", "links", "orphans", "broken", "orphanAttachments", "empty", "short"];
+var DEFAULT_STAT_KEYS = ["notes", "attachments", "folders", "recent", "words", "links", "orphans", "broken", "orphanAttachments", "empty"];
 var STAT_LABELS = {
   notes: "\u7B14\u8BB0",
   attachments: "\u9644\u4EF6",
@@ -614,6 +615,7 @@ var STAT_LABELS = {
   links: "\u94FE\u63A5",
   orphans: "\u5B64\u7ACB\u7B14\u8BB0",
   broken: "\u5931\u6548\u94FE\u63A5",
+  orphanAttachments: "\u5B64\u7ACB\u9644\u4EF6",
   empty: "\u7A7A\u7B14\u8BB0",
   short: "\u77ED\u7B14\u8BB0"
 };
@@ -650,6 +652,7 @@ var vaultStats = {
     if (selected.includes("links")) metric(grid, t("\u94FE\u63A5"), data.links, data.linkedPaths, plugin, host);
     if (selected.includes("orphans")) metric(grid, t("\u5B64\u7ACB\u7B14\u8BB0"), data.orphanPaths.length, data.orphanPaths, plugin, host);
     if (selected.includes("broken")) metric(grid, t("\u5931\u6548\u94FE\u63A5"), data.brokenPaths.length, data.brokenPaths, plugin, host);
+    if (selected.includes("orphanAttachments")) metric(grid, t("\u5B64\u7ACB\u9644\u4EF6"), data.orphanAttachmentPaths.length, data.orphanAttachmentPaths, plugin, host);
     if (selected.includes("empty")) metric(grid, t("\u7A7A\u7B14\u8BB0"), data.emptyPaths.length, data.emptyPaths, plugin, host);
     if (selected.includes("short")) metric(grid, t("\u77ED\u7B14\u8BB0"), data.shortPaths.length, data.shortPaths, plugin, host);
   }
@@ -1980,7 +1983,7 @@ function countReadableWords(input) {
 }
 
 // src/metrics/aggregate.ts
-function aggregateMetrics(notes, attachmentPaths, folderPaths, now, recentDays, shortThreshold, unresolved = {}) {
+function aggregateMetrics(notes, attachmentPaths, folderPaths, now, recentDays, shortThreshold, unresolved = {}, referenced = /* @__PURE__ */ new Set()) {
   const cutoffKey = resolveCreatedDate(void 0, now - Math.max(1, recentDays) * 864e5);
   const isRecent = (note) => resolveCreatedDate(note.frontmatterCreated, note.ctime) >= cutoffKey;
   return {
@@ -2000,6 +2003,9 @@ function aggregateMetrics(notes, attachmentPaths, folderPaths, now, recentDays, 
     shortPaths: notes.filter((note) => note.words <= shortThreshold).map((note) => note.path),
     // 失效链接口径：正文含未解析链接（指向不存在笔记）的源笔记；采集层已按 excluded/扩展名过滤
     brokenPaths: Object.entries(unresolved).filter(([, targets]) => Object.keys(targets).length > 0).map(([source]) => source),
+    // 孤立附件口径：不在引用并集（resolvedLinks 全部目标）里的附件；引用来源不限扫描范围——
+    // 被排除目录的笔记引用着也算「在用」，否则换扫描范围孤立数会虚高
+    orphanAttachmentPaths: attachmentPaths.filter((path) => !referenced.has(path)),
     heatmap: aggregateHeatmap(notes, now),
     topFolders: aggregateTopFolders(notes, folderPaths)
   };
@@ -2056,7 +2062,7 @@ var VaultIndex = class {
     for (const [source, targets] of Object.entries(this.app.metadataCache.unresolvedLinks)) {
       if (this.included(source) && Object.keys(targets).length > 0) unresolved[source] = targets;
     }
-    return aggregateMetrics(notes, attachmentPaths, folderPaths, Date.now(), this.recentDays(), this.threshold(), unresolved);
+    return aggregateMetrics(notes, attachmentPaths, folderPaths, Date.now(), this.recentDays(), this.threshold(), unresolved, new Set(incoming.keys()));
   }
   recentNotes(limit, filter = {}) {
     return this.app.vault.getMarkdownFiles().filter((file) => {

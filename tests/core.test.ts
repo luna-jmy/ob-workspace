@@ -36,6 +36,16 @@ describe("metric aggregation", () => {
     const unresolved = { "a.md": { "missing-note": 2 }, "b.md": {} };
     expect(aggregateMetrics(base, [], [], 1, 7, 10, unresolved).brokenPaths).toEqual(["a.md"]);
   });
+  it("lists attachments outside the referenced set as orphan attachments", () => {
+    const base = [{ path: "a.md", words: 1, ctime: 1, mtime: 1, outgoing: 1, incoming: 0 }];
+    const attachments = ["img/used.png", "img/unused.png", "doc.pdf"];
+    // 无引用集（默认参数）：全部算孤立
+    expect(aggregateMetrics(base, attachments, [], 1, 7, 10).orphanAttachmentPaths).toEqual(attachments);
+    // 引用并集里混着笔记目标也无妨：只按成员判定
+    const referenced = new Set(["img/used.png", "a.md"]);
+    expect(aggregateMetrics(base, attachments, [], 1, 7, 10, {}, referenced).orphanAttachmentPaths)
+      .toEqual(["img/unused.png", "doc.pdf"]);
+  });
   it("最近新增按 frontmatter created 优先，ctime 回退——vault 复制重置 ctime 不再暴涨", () => {
     const now = new Date(2026, 8, 26, 12).getTime();
     const weekAgo = new Date(2026, 8, 19).getTime();

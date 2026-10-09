@@ -25,6 +25,7 @@ export const en: Record<string, string> = {
   "可读字数": "Readable words",
   "链接": "Links",
   "孤立笔记": "Orphan notes",
+  "孤立附件": "Orphan attachments",
   "失效链接": "Broken links",
   "空笔记": "Empty notes",
   "短笔记": "Short notes",

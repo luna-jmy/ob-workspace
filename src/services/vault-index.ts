@@ -38,7 +38,8 @@ export class VaultIndex {
     for (const [source, targets] of Object.entries(this.app.metadataCache.unresolvedLinks)) {
       if (this.included(source) && Object.keys(targets).length > 0) unresolved[source] = targets;
     }
-    return aggregateMetrics(notes, attachmentPaths, folderPaths, Date.now(), this.recentDays(), this.threshold(), unresolved);
+    // 引用并集 = resolvedLinks 全部目标（incoming 的键即它）：孤立附件判定用，来源不限扫描范围
+    return aggregateMetrics(notes, attachmentPaths, folderPaths, Date.now(), this.recentDays(), this.threshold(), unresolved, new Set(incoming.keys()));
   }
   recentNotes(limit: number, filter: NoteFilter = {}): TFile[] {
     return this.app.vault.getMarkdownFiles().filter((file) => {

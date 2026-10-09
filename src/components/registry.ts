@@ -26,11 +26,11 @@ export interface ComponentDefinition {
   render(container: HTMLElement, block: Block, host: Component, plugin: CustomWorkspacePlugin): Promise<void>;
 }
 
-const STAT_KEYS = ["notes", "attachments", "folders", "recent", "words", "links", "orphans", "broken", "empty", "short"] as const;
-const DEFAULT_STAT_KEYS: StatKey[] = ["notes", "attachments", "folders", "recent", "words", "links", "orphans", "broken", "empty"];
+const STAT_KEYS = ["notes", "attachments", "folders", "recent", "words", "links", "orphans", "broken", "orphanAttachments", "empty", "short"] as const;
+const DEFAULT_STAT_KEYS: StatKey[] = ["notes", "attachments", "folders", "recent", "words", "links", "orphans", "broken", "orphanAttachments", "empty"];
 export type StatKey = typeof STAT_KEYS[number];
 export const STAT_LABELS: Record<StatKey, string> = {
-  notes: "笔记", attachments: "附件", folders: "文件夹", recent: "最近新增", words: "可读字数", links: "链接", orphans: "孤立笔记", broken: "失效链接", empty: "空笔记", short: "短笔记"
+  notes: "笔记", attachments: "附件", folders: "文件夹", recent: "最近新增", words: "可读字数", links: "链接", orphans: "孤立笔记", broken: "失效链接", orphanAttachments: "孤立附件", empty: "空笔记", short: "短笔记"
 };
 export function selectedStats(value: ParamValue | undefined): StatKey[] {
   if (!Array.isArray(value)) return [...DEFAULT_STAT_KEYS];
@@ -59,6 +59,7 @@ const vaultStats: ComponentDefinition = {
     if (selected.includes("links")) metric(grid, t("链接"), data.links, data.linkedPaths, plugin, host);
     if (selected.includes("orphans")) metric(grid, t("孤立笔记"), data.orphanPaths.length, data.orphanPaths, plugin, host);
     if (selected.includes("broken")) metric(grid, t("失效链接"), data.brokenPaths.length, data.brokenPaths, plugin, host);
+    if (selected.includes("orphanAttachments")) metric(grid, t("孤立附件"), data.orphanAttachmentPaths.length, data.orphanAttachmentPaths, plugin, host);
     if (selected.includes("empty")) metric(grid, t("空笔记"), data.emptyPaths.length, data.emptyPaths, plugin, host);
     if (selected.includes("short")) metric(grid, t("短笔记"), data.shortPaths.length, data.shortPaths, plugin, host);
   }
