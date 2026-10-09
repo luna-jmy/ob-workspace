@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.1.0
+
+### Added
+
+- Vault stats gains a tenth metric, **Broken links**: notes whose body contains
+  unresolved wiki / Markdown links. Click the number to drill down into the
+  affected notes.
+- Today's Tasks has a new **Show recently completed** toggle (on by default);
+  turn it off to hide the recently-completed section.
+- Structure Analysis counts subfolders per top-level folder, with three
+  toggles: show note count (on), show word count (on), and show subfolder
+  count (off by default).
+
+### Changed
+
+- The Writing Heatmap automatically uses the square (quarter-width) layout on
+  mobile — no need to narrow the tile by hand.
+- Edit-mode parameter panels are tighter: each list entry keeps its own
+  bordered box, the confirm toggle and the move-up / move-down / delete
+  buttons share a single row inside it, and the "Add" button is separated by
+  a divider.
+
 ## 1.0.3
 
 ### Fixed
