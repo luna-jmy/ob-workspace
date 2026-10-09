@@ -120,6 +120,19 @@ export class WorkspaceRenderer extends Component {
       }));
     }
   }
+  /** 条目操作合并为一行：可选「要确认」开关 + 上移/下移/删除图标按钮（紧凑布局） */
+  private appendRowActions(row: HTMLElement, options: { index: number; total: number; confirm?: { value: boolean; change: (next: boolean) => Promise<void> }; move?: (offset: -1 | 1) => Promise<void>; remove: () => Promise<void> }): void {
+    const setting = new Setting(row);
+    if (options.confirm) {
+      setting.setName(t("要确认"));
+      setting.addToggle((toggle) => toggle.setValue(options.confirm!.value).onChange((next) => void options.confirm!.change(next)));
+    }
+    if (options.move) {
+      setting.addButton((button) => button.setIcon("arrow-up").setTooltip(t("上移")).setDisabled(options.index === 0).onClick(() => void options.move!(-1)));
+      setting.addButton((button) => button.setIcon("arrow-down").setTooltip(t("下移")).setDisabled(options.index === options.total - 1).onClick(() => void options.move!(1)));
+    }
+    setting.addButton((button) => button.setIcon("trash-2").setTooltip(t("删除")).onClick(() => void options.remove()));
+  }
   private renderCommandEditor(container: HTMLElement, block: Block, refreshPreview: () => Promise<void>): void {
     const values = Array.isArray(block.params.buttons) ? block.params.buttons.filter((value): value is { [key: string]: import("../types").ParamValue } => typeof value === "object" && value !== null && !Array.isArray(value)) : [];
     const draw = (): void => {
@@ -132,13 +145,16 @@ export class WorkspaceRenderer extends Component {
           dropdown.addOption("", t("请选择命令")); for (const command of this.plugin.commands.list()) dropdown.addOption(command.id, command.name);
           dropdown.setValue(typeof value.command === "string" ? value.command : "").onChange(async (next) => { value.command = next; await this.plugin.persist(); await refreshPreview(); });
         });
-        new Setting(row).setName(t("要确认")).addToggle((toggle) => toggle.setValue(value.confirm === true).onChange(async (next) => { value.confirm = next; await this.plugin.persist(); await refreshPreview(); }));
-        new Setting(row)
-          .addButton((button) => button.setIcon("arrow-up").setTooltip(t("上移")).setDisabled(index === 0).onClick(async () => { values.splice(0, values.length, ...moveItem(values, index, -1)); block.params.buttons = values; await this.plugin.persist(); await refreshPreview(); draw(); }))
-          .addButton((button) => button.setIcon("arrow-down").setTooltip(t("下移")).setDisabled(index === values.length - 1).onClick(async () => { values.splice(0, values.length, ...moveItem(values, index, 1)); block.params.buttons = values; await this.plugin.persist(); await refreshPreview(); draw(); }))
-          .addButton((button) => button.setButtonText(t("删除")).onClick(async () => { values.splice(index, 1); block.params.buttons = values; await this.plugin.persist(); await refreshPreview(); draw(); }));
+        const mutate = async (operation: () => void): Promise<void> => { operation(); block.params.buttons = values; await this.plugin.persist(); await refreshPreview(); draw(); };
+        this.appendRowActions(row, {
+          index, total: values.length,
+          confirm: { value: value.confirm === true, change: async (next) => { value.confirm = next; await this.plugin.persist(); await refreshPreview(); } },
+          move: (offset) => mutate(() => values.splice(0, values.length, ...moveItem(values, index, offset))),
+          remove: () => mutate(() => values.splice(index, 1))
+        });
       });
-      new Setting(editor).addButton((button) => button.setButtonText(t("添加按钮")).setCta().onClick(async () => { values.push({ label: "", command: "", confirm: false }); block.params.buttons = values; await this.plugin.persist(); await refreshPreview(); draw(); }));
+      const addRow = new Setting(editor).addButton((button) => button.setButtonText(t("添加按钮")).setCta().onClick(async () => { values.push({ label: "", command: "", confirm: false }); block.params.buttons = values; await this.plugin.persist(); await refreshPreview(); draw(); }));
+      addRow.settingEl.addClass("cw-editor-add");
     };
     draw();
   }
@@ -160,15 +176,18 @@ export class WorkspaceRenderer extends Component {
         new Setting(row).setName(t("目标目录")).addText((text) => text.setValue(typeof value.folder === "string" ? value.folder : "").onChange(async (next) => { value.folder = next; await this.plugin.persist(); await refreshPreview(); }));
         new Setting(row).setName(t("文件名模式")).addText((text) => text.setValue(typeof value.filename === "string" ? value.filename : "{{date:YYYY-MM-DD}} {{title}}").onChange(async (next) => { value.filename = next; await this.plugin.persist(); await refreshPreview(); }));
         new Setting(row).setName(t("标题变量")).addText((text) => text.setValue(typeof value.title === "string" ? value.title : "").onChange(async (next) => { value.title = next; await this.plugin.persist(); await refreshPreview(); }));
-        new Setting(row)
-          .addButton((button) => button.setIcon("arrow-up").setTooltip(t("上移")).setDisabled(index === 0).onClick(async () => { values.splice(0, values.length, ...moveItem(values, index, -1)); block.params.buttons = values; await this.plugin.persist(); await refreshPreview(); draw(); }))
-          .addButton((button) => button.setIcon("arrow-down").setTooltip(t("下移")).setDisabled(index === values.length - 1).onClick(async () => { values.splice(0, values.length, ...moveItem(values, index, 1)); block.params.buttons = values; await this.plugin.persist(); await refreshPreview(); draw(); }))
-          .addButton((button) => button.setButtonText(t("删除")).onClick(async () => { values.splice(index, 1); block.params.buttons = values; await this.plugin.persist(); await refreshPreview(); draw(); }));
+        const mutate = async (operation: () => void): Promise<void> => { operation(); block.params.buttons = values; await this.plugin.persist(); await refreshPreview(); draw(); };
+        this.appendRowActions(row, {
+          index, total: values.length,
+          move: (offset) => mutate(() => values.splice(0, values.length, ...moveItem(values, index, offset))),
+          remove: () => mutate(() => values.splice(index, 1))
+        });
       });
-      new Setting(editor).addButton((button) => button.setButtonText(t("添加按钮")).setCta().onClick(async () => {
+      const addRow = new Setting(editor).addButton((button) => button.setButtonText(t("添加按钮")).setCta().onClick(async () => {
         values.push({ label: "", template: "", folder: "", filename: "{{date:YYYY-MM-DD}} {{title}}", title: "" });
         block.params.buttons = values; await this.plugin.persist(); await refreshPreview(); draw();
       }));
+      addRow.settingEl.addClass("cw-editor-add");
     };
     draw();
   }
@@ -225,9 +244,10 @@ export class WorkspaceRenderer extends Component {
         new Setting(row).setName(t("日期")).addText((text) => text.setValue(typeof value.date === "string" ? value.date : "").setPlaceholder("05-01").onChange(async (next) => { value.date = next; await this.plugin.persist(); await refreshPreview(); }));
         new Setting(row).setName(t("标题")).addText((text) => text.setValue(typeof value.title === "string" ? value.title : "").onChange(async (next) => { value.title = next; await this.plugin.persist(); await refreshPreview(); }));
         new Setting(row).setName(t("图标")).addText((text) => text.setValue(typeof value.icon === "string" ? value.icon : "").setPlaceholder("🚩").onChange(async (next) => { value.icon = next; await this.plugin.persist(); await refreshPreview(); }));
-        new Setting(row).addButton((button) => button.setButtonText(t("删除")).onClick(async () => { values.splice(index, 1); block.params.events = values; await this.plugin.persist(); await refreshPreview(); draw(); }));
+        this.appendRowActions(row, { index, total: values.length, remove: async () => { values.splice(index, 1); block.params.events = values; await this.plugin.persist(); await refreshPreview(); draw(); } });
       });
-      new Setting(editor).addButton((button) => button.setButtonText(t("添加事件")).setCta().onClick(async () => { values.push({ date: "", title: "", icon: "🚩" }); block.params.events = values; await this.plugin.persist(); await refreshPreview(); draw(); }));
+      const addRow = new Setting(editor).addButton((button) => button.setButtonText(t("添加事件")).setCta().onClick(async () => { values.push({ date: "", title: "", icon: "🚩" }); block.params.events = values; await this.plugin.persist(); await refreshPreview(); draw(); }));
+      addRow.settingEl.addClass("cw-editor-add");
     };
     draw();
   }

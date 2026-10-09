@@ -1,5 +1,5 @@
 export interface HeatmapDay { date: string; notes: number; words: number }
-export interface FolderMetric { name: string; notes: number; words: number; paths: string[] }
+export interface FolderMetric { name: string; notes: number; words: number; paths: string[]; subfolders: number }
 export interface AnalyticsNote { path: string; words: number; ctime: number; mtime: number; frontmatterCreated?: unknown }
 
 function localDateKey(timestamp: number): string {
@@ -40,12 +40,21 @@ export function aggregateHeatmap(notes: AnalyticsNote[], now: number, days = 365
   return [...values.values()].sort((a, b) => a.date.localeCompare(b.date));
 }
 
-export function aggregateTopFolders(notes: AnalyticsNote[]): FolderMetric[] {
+export function aggregateTopFolders(notes: AnalyticsNote[], folderPaths: string[] = []): FolderMetric[] {
   const folders = new Map<string, FolderMetric>();
   for (const note of notes) {
     const slash = note.path.indexOf("/"); const name = slash < 0 ? "" : note.path.slice(0, slash);
-    const metric = folders.get(name) ?? { name, notes: 0, words: 0, paths: [] };
+    const metric = folders.get(name) ?? { name, notes: 0, words: 0, paths: [], subfolders: 0 };
     metric.notes += 1; metric.words += note.words; metric.paths.push(note.path); folders.set(name, metric);
+  }
+  // 子文件夹数：按完整路径去重后归到一级目录（folderPaths 可能含没有笔记的目录）
+  const seen = new Set<string>();
+  for (const folderPath of folderPaths) {
+    const slash = folderPath.indexOf("/"); if (slash < 0) continue;
+    const name = folderPath.slice(0, slash);
+    if (!folders.has(name) || seen.has(folderPath)) continue;
+    seen.add(folderPath);
+    folders.get(name)!.subfolders += 1;
   }
   return [...folders.values()].sort((a, b) => b.notes - a.notes || b.words - a.words || a.name.localeCompare(b.name));
 }

@@ -55,6 +55,7 @@ var en = {
   "\u53EF\u8BFB\u5B57\u6570": "Readable words",
   "\u94FE\u63A5": "Links",
   "\u5B64\u7ACB\u7B14\u8BB0": "Orphan notes",
+  "\u5931\u6548\u94FE\u63A5": "Broken links",
   "\u7A7A\u7B14\u8BB0": "Empty notes",
   "\u77ED\u7B14\u8BB0": "Short notes",
   "\u8FC7\u53BB 12 \u4E2A\u6708": "Past 12 months",
@@ -74,6 +75,11 @@ var en = {
   "\u865A\u7EBF\u6309 created \u4F30\u7B97\u7B14\u8BB0\u51FA\u73B0\u65F6\u95F4\uFF0C\u65E0\u6CD5\u8FD8\u539F\u94FE\u63A5\u5B9E\u9645\u6DFB\u52A0\u65E5\u671F": "The dashed line estimates when notes appeared from created; it cannot reconstruct when links were actually added",
   "\u6309\u4E00\u7EA7\u76EE\u5F55\u7EDF\u8BA1 Markdown \u7B14\u8BB0": "Markdown notes grouped by top-level folder",
   "\u6839\u76EE\u5F55": "Vault root",
+  "\u4E2A\u5B50\u6587\u4EF6\u5939": "subfolders",
+  "\u5C55\u793A\u7B14\u8BB0\u6570\u91CF": "Show note count",
+  "\u5C55\u793A\u5B57\u6570": "Show word count",
+  "\u5C55\u793A\u5B50\u6587\u4EF6\u5939\u6570": "Show subfolder count",
+  "\u663E\u793A\u6700\u8FD1\u5B8C\u6210": "Show recently completed",
   "\u7BC7": "notes",
   "\u5B57": "words",
   "\u4ECA\u5929": "Today",
@@ -466,17 +472,26 @@ function aggregateHeatmap(notes, now, days = 365) {
   }
   return [...values.values()].sort((a, b) => a.date.localeCompare(b.date));
 }
-function aggregateTopFolders(notes) {
+function aggregateTopFolders(notes, folderPaths = []) {
   var _a;
   const folders = /* @__PURE__ */ new Map();
   for (const note of notes) {
     const slash = note.path.indexOf("/");
     const name = slash < 0 ? "" : note.path.slice(0, slash);
-    const metric2 = (_a = folders.get(name)) != null ? _a : { name, notes: 0, words: 0, paths: [] };
+    const metric2 = (_a = folders.get(name)) != null ? _a : { name, notes: 0, words: 0, paths: [], subfolders: 0 };
     metric2.notes += 1;
     metric2.words += note.words;
     metric2.paths.push(note.path);
     folders.set(name, metric2);
+  }
+  const seen = /* @__PURE__ */ new Set();
+  for (const folderPath of folderPaths) {
+    const slash = folderPath.indexOf("/");
+    if (slash < 0) continue;
+    const name = folderPath.slice(0, slash);
+    if (!folders.has(name) || seen.has(folderPath)) continue;
+    seen.add(folderPath);
+    folders.get(name).subfolders += 1;
   }
   return [...folders.values()].sort((a, b) => b.notes - a.notes || b.words - a.words || a.name.localeCompare(b.name));
 }
@@ -587,8 +602,8 @@ function paramNumber(value, fallback) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
 }
-var STAT_KEYS = ["notes", "attachments", "folders", "recent", "words", "links", "orphans", "empty", "short"];
-var DEFAULT_STAT_KEYS = ["notes", "attachments", "folders", "recent", "words", "links", "orphans", "empty"];
+var STAT_KEYS = ["notes", "attachments", "folders", "recent", "words", "links", "orphans", "broken", "empty", "short"];
+var DEFAULT_STAT_KEYS = ["notes", "attachments", "folders", "recent", "words", "links", "orphans", "broken", "empty"];
 var STAT_LABELS = {
   notes: "\u7B14\u8BB0",
   attachments: "\u9644\u4EF6",
@@ -597,6 +612,7 @@ var STAT_LABELS = {
   words: "\u53EF\u8BFB\u5B57\u6570",
   links: "\u94FE\u63A5",
   orphans: "\u5B64\u7ACB\u7B14\u8BB0",
+  broken: "\u5931\u6548\u94FE\u63A5",
   empty: "\u7A7A\u7B14\u8BB0",
   short: "\u77ED\u7B14\u8BB0"
 };
@@ -632,6 +648,7 @@ var vaultStats = {
     if (selected.includes("words")) metric(grid, t("\u53EF\u8BFB\u5B57\u6570"), data.words, data.notePaths, plugin, host);
     if (selected.includes("links")) metric(grid, t("\u94FE\u63A5"), data.links, data.linkedPaths, plugin, host);
     if (selected.includes("orphans")) metric(grid, t("\u5B64\u7ACB\u7B14\u8BB0"), data.orphanPaths.length, data.orphanPaths, plugin, host);
+    if (selected.includes("broken")) metric(grid, t("\u5931\u6548\u94FE\u63A5"), data.brokenPaths.length, data.brokenPaths, plugin, host);
     if (selected.includes("empty")) metric(grid, t("\u7A7A\u7B14\u8BB0"), data.emptyPaths.length, data.emptyPaths, plugin, host);
     if (selected.includes("short")) metric(grid, t("\u77ED\u7B14\u8BB0"), data.shortPaths.length, data.shortPaths, plugin, host);
   }
@@ -997,7 +1014,7 @@ var activityHeatmap = {
     summary.createSpan({ text: `${total.toLocaleString()} ${useNotes ? t("\u7BC7\u7B14\u8BB0") : t("\u5B57")}` });
     const explanation = useNotes ? t("\u65B0\u589E\u7B14\u8BB0\u4F18\u5148\u4F7F\u7528 created\uFF0C\u7F3A\u5931\u65F6\u4F7F\u7528\u6587\u4EF6\u521B\u5EFA\u65F6\u95F4") : t("\u6309\u7CFB\u7EDF\u4FEE\u6539\u65E5\u671F\u5F52\u7EC4\u5F53\u524D\u5B57\u6570");
     const unit = useNotes ? t("\u7BC7") : t("\u5B57");
-    const grid = container.createDiv({ cls: `cw-heatmap${block.span === 3 ? " cw-heatmap--square" : ""}`, attr: { role: "img", "aria-label": explanation } });
+    const grid = container.createDiv({ cls: `cw-heatmap${block.span === 3 || import_obsidian4.Platform.isMobile ? " cw-heatmap--square" : ""}`, attr: { role: "img", "aria-label": explanation } });
     const end = moment().startOf("day");
     const start = end.clone().subtract(364, "days");
     for (let index = 0; index < start.day(); index += 1) grid.createSpan({ cls: "cw-heatmap__blank", attr: { "aria-hidden": "true" } });
@@ -1065,13 +1082,20 @@ var structureAnalysis = {
   name: "\u77E5\u8BC6\u5E93\u7ED3\u6784\u5206\u6790",
   icon: "folders",
   description: "",
-  params: [],
-  async render(container, _block, host, plugin) {
+  params: [
+    { key: "showNotes", type: "boolean", defaultValue: true },
+    { key: "showWords", type: "boolean", defaultValue: true },
+    { key: "showSubfolders", type: "boolean", defaultValue: false }
+  ],
+  async render(container, block, host, plugin) {
     const data = await plugin.index.metrics();
     if (!data.topFolders.length) {
       container.createDiv({ text: t("\u6682\u65E0\u5185\u5BB9"), cls: "cw-empty" });
       return;
     }
+    const showNotes = block.params.showNotes !== false;
+    const showWords = block.params.showWords !== false;
+    const showSubfolders = block.params.showSubfolders === true;
     container.createDiv({ text: t("\u6309\u4E00\u7EA7\u76EE\u5F55\u7EDF\u8BA1 Markdown \u7B14\u8BB0"), cls: "cw-analytics-note cw-analytics-note--top" });
     const maximum = Math.max(1, ...data.topFolders.map((folder) => folder.notes));
     const grid = container.createDiv({ cls: "cw-structure" });
@@ -1083,8 +1107,9 @@ var structureAnalysis = {
       const heading = content.createSpan({ cls: "cw-structure__heading" });
       heading.createSpan({ text: label, cls: "cw-structure__name" });
       const figures = heading.createSpan({ cls: "cw-structure__figures" });
-      figures.createSpan({ text: `${folder.notes.toLocaleString()} ${t("\u7BC7")}` });
-      figures.createSpan({ text: `${new Intl.NumberFormat(void 0, { notation: "compact", maximumFractionDigits: 1 }).format(folder.words)} ${t("\u5B57")}` });
+      if (showNotes) figures.createSpan({ text: `${folder.notes.toLocaleString()} ${t("\u7BC7")}` });
+      if (showWords) figures.createSpan({ text: `${new Intl.NumberFormat(void 0, { notation: "compact", maximumFractionDigits: 1 }).format(folder.words)} ${t("\u5B57")}` });
+      if (showSubfolders) figures.createSpan({ text: `${folder.subfolders.toLocaleString()} ${t("\u4E2A\u5B50\u6587\u4EF6\u5939")}` });
       const track = content.createSpan({ cls: "cw-structure__track" });
       const bar = track.createSpan({ cls: "cw-structure__bar" });
       bar.style.setProperty("--cw-structure-width", `${folder.notes / maximum * 100}%`);
@@ -1098,9 +1123,9 @@ var todayTasks = {
   name: "\u4ECA\u65E5\u4EFB\u52A1",
   icon: "list-checks",
   description: "",
-  params: [],
-  async render(container, _block, host, plugin) {
-    await plugin.renderTasks(container, host);
+  params: [{ key: "showCompleted", type: "boolean", defaultValue: true }],
+  async render(container, block, host, plugin) {
+    await plugin.renderTasks(container, host, block.params.showCompleted !== false);
   }
 };
 var BUILTINS = [vaultStats, todayTasks, quickJump, recentCreated, commandButtons, wordsTrend, activityHeatmap, linkTrend, structureAnalysis, templater, baseView, dataview, randomQuote, yearTimeline];
@@ -1157,7 +1182,11 @@ function addParamSetting(parent, definition, block, onChange) {
     frontmatterKey: t("Frontmatter \u5C5E\u6027\u540D"),
     frontmatterValue: t("Frontmatter \u5C5E\u6027\u503C"),
     metric: t("\u7EDF\u8BA1\u65B9\u5F0F"),
-    range: t("\u7EDF\u8BA1\u8303\u56F4")
+    range: t("\u7EDF\u8BA1\u8303\u56F4"),
+    showNotes: t("\u5C55\u793A\u7B14\u8BB0\u6570\u91CF"),
+    showWords: t("\u5C55\u793A\u5B57\u6570"),
+    showSubfolders: t("\u5C55\u793A\u5B50\u6587\u4EF6\u5939\u6570"),
+    showCompleted: t("\u663E\u793A\u6700\u8FD1\u5B8C\u6210")
   };
   const optionLabels = { "\u5B57\u6570": t("\u5B57\u6570"), "\u65B0\u589E\u7B14\u8BB0\u6570": t("\u65B0\u589E\u7B14\u8BB0\u6570") };
   const setting = new import_obsidian4.Setting(parent).setName((_a = labels[definition.key]) != null ? _a : definition.key);
@@ -1399,6 +1428,19 @@ ${detail}` : detail, cls: "cw-error" });
       }));
     }
   }
+  /** 条目操作合并为一行：可选「要确认」开关 + 上移/下移/删除图标按钮（紧凑布局） */
+  appendRowActions(row, options) {
+    const setting = new import_obsidian5.Setting(row);
+    if (options.confirm) {
+      setting.setName(t("\u8981\u786E\u8BA4"));
+      setting.addToggle((toggle) => toggle.setValue(options.confirm.value).onChange((next) => void options.confirm.change(next)));
+    }
+    if (options.move) {
+      setting.addButton((button) => button.setIcon("arrow-up").setTooltip(t("\u4E0A\u79FB")).setDisabled(options.index === 0).onClick(() => void options.move(-1)));
+      setting.addButton((button) => button.setIcon("arrow-down").setTooltip(t("\u4E0B\u79FB")).setDisabled(options.index === options.total - 1).onClick(() => void options.move(1)));
+    }
+    setting.addButton((button) => button.setIcon("trash-2").setTooltip(t("\u5220\u9664")).onClick(() => void options.remove()));
+  }
   renderCommandEditor(container, block, refreshPreview) {
     const values = Array.isArray(block.params.buttons) ? block.params.buttons.filter((value) => typeof value === "object" && value !== null && !Array.isArray(value)) : [];
     const draw = () => {
@@ -1421,38 +1463,33 @@ ${detail}` : detail, cls: "cw-error" });
             await refreshPreview();
           });
         });
-        new import_obsidian5.Setting(row).setName(t("\u8981\u786E\u8BA4")).addToggle((toggle) => toggle.setValue(value.confirm === true).onChange(async (next) => {
-          value.confirm = next;
-          await this.plugin.persist();
-          await refreshPreview();
-        }));
-        new import_obsidian5.Setting(row).addButton((button) => button.setIcon("arrow-up").setTooltip(t("\u4E0A\u79FB")).setDisabled(index === 0).onClick(async () => {
-          values.splice(0, values.length, ...moveItem(values, index, -1));
+        const mutate = async (operation) => {
+          operation();
           block.params.buttons = values;
           await this.plugin.persist();
           await refreshPreview();
           draw();
-        })).addButton((button) => button.setIcon("arrow-down").setTooltip(t("\u4E0B\u79FB")).setDisabled(index === values.length - 1).onClick(async () => {
-          values.splice(0, values.length, ...moveItem(values, index, 1));
-          block.params.buttons = values;
-          await this.plugin.persist();
-          await refreshPreview();
-          draw();
-        })).addButton((button) => button.setButtonText(t("\u5220\u9664")).onClick(async () => {
-          values.splice(index, 1);
-          block.params.buttons = values;
-          await this.plugin.persist();
-          await refreshPreview();
-          draw();
-        }));
+        };
+        this.appendRowActions(row, {
+          index,
+          total: values.length,
+          confirm: { value: value.confirm === true, change: async (next) => {
+            value.confirm = next;
+            await this.plugin.persist();
+            await refreshPreview();
+          } },
+          move: (offset) => mutate(() => values.splice(0, values.length, ...moveItem(values, index, offset))),
+          remove: () => mutate(() => values.splice(index, 1))
+        });
       });
-      new import_obsidian5.Setting(editor).addButton((button) => button.setButtonText(t("\u6DFB\u52A0\u6309\u94AE")).setCta().onClick(async () => {
+      const addRow = new import_obsidian5.Setting(editor).addButton((button) => button.setButtonText(t("\u6DFB\u52A0\u6309\u94AE")).setCta().onClick(async () => {
         values.push({ label: "", command: "", confirm: false });
         block.params.buttons = values;
         await this.plugin.persist();
         await refreshPreview();
         draw();
       }));
+      addRow.settingEl.addClass("cw-editor-add");
     };
     draw();
   }
@@ -1496,33 +1533,28 @@ ${detail}` : detail, cls: "cw-error" });
           await this.plugin.persist();
           await refreshPreview();
         }));
-        new import_obsidian5.Setting(row).addButton((button) => button.setIcon("arrow-up").setTooltip(t("\u4E0A\u79FB")).setDisabled(index === 0).onClick(async () => {
-          values.splice(0, values.length, ...moveItem(values, index, -1));
+        const mutate = async (operation) => {
+          operation();
           block.params.buttons = values;
           await this.plugin.persist();
           await refreshPreview();
           draw();
-        })).addButton((button) => button.setIcon("arrow-down").setTooltip(t("\u4E0B\u79FB")).setDisabled(index === values.length - 1).onClick(async () => {
-          values.splice(0, values.length, ...moveItem(values, index, 1));
-          block.params.buttons = values;
-          await this.plugin.persist();
-          await refreshPreview();
-          draw();
-        })).addButton((button) => button.setButtonText(t("\u5220\u9664")).onClick(async () => {
-          values.splice(index, 1);
-          block.params.buttons = values;
-          await this.plugin.persist();
-          await refreshPreview();
-          draw();
-        }));
+        };
+        this.appendRowActions(row, {
+          index,
+          total: values.length,
+          move: (offset) => mutate(() => values.splice(0, values.length, ...moveItem(values, index, offset))),
+          remove: () => mutate(() => values.splice(index, 1))
+        });
       });
-      new import_obsidian5.Setting(editor).addButton((button) => button.setButtonText(t("\u6DFB\u52A0\u6309\u94AE")).setCta().onClick(async () => {
+      const addRow = new import_obsidian5.Setting(editor).addButton((button) => button.setButtonText(t("\u6DFB\u52A0\u6309\u94AE")).setCta().onClick(async () => {
         values.push({ label: "", template: "", folder: "", filename: "{{date:YYYY-MM-DD}} {{title}}", title: "" });
         block.params.buttons = values;
         await this.plugin.persist();
         await refreshPreview();
         draw();
       }));
+      addRow.settingEl.addClass("cw-editor-add");
     };
     draw();
   }
@@ -1634,21 +1666,22 @@ ${detail}` : detail, cls: "cw-error" });
           await this.plugin.persist();
           await refreshPreview();
         }));
-        new import_obsidian5.Setting(row).addButton((button) => button.setButtonText(t("\u5220\u9664")).onClick(async () => {
+        this.appendRowActions(row, { index, total: values.length, remove: async () => {
           values.splice(index, 1);
           block.params.events = values;
           await this.plugin.persist();
           await refreshPreview();
           draw();
-        }));
+        } });
       });
-      new import_obsidian5.Setting(editor).addButton((button) => button.setButtonText(t("\u6DFB\u52A0\u4E8B\u4EF6")).setCta().onClick(async () => {
+      const addRow = new import_obsidian5.Setting(editor).addButton((button) => button.setButtonText(t("\u6DFB\u52A0\u4E8B\u4EF6")).setCta().onClick(async () => {
         values.push({ date: "", title: "", icon: "\u{1F6A9}" });
         block.params.events = values;
         await this.plugin.persist();
         await refreshPreview();
         draw();
       }));
+      addRow.settingEl.addClass("cw-editor-add");
     };
     draw();
   }
@@ -1944,7 +1977,7 @@ function countReadableWords(input) {
 }
 
 // src/metrics/aggregate.ts
-function aggregateMetrics(notes, attachmentPaths, folderPaths, now, recentDays, shortThreshold) {
+function aggregateMetrics(notes, attachmentPaths, folderPaths, now, recentDays, shortThreshold, unresolved = {}) {
   const cutoffKey = resolveCreatedDate(void 0, now - Math.max(1, recentDays) * 864e5);
   const isRecent = (note) => resolveCreatedDate(note.frontmatterCreated, note.ctime) >= cutoffKey;
   return {
@@ -1962,8 +1995,10 @@ function aggregateMetrics(notes, attachmentPaths, folderPaths, now, recentDays, 
     orphanPaths: notes.filter((note) => note.outgoing === 0 && note.incoming === 0).map((note) => note.path),
     emptyPaths: notes.filter((note) => note.words === 0).map((note) => note.path),
     shortPaths: notes.filter((note) => note.words <= shortThreshold).map((note) => note.path),
+    // 失效链接口径：正文含未解析链接（指向不存在笔记）的源笔记；采集层已按 excluded/扩展名过滤
+    brokenPaths: Object.entries(unresolved).filter(([, targets]) => Object.keys(targets).length > 0).map(([source]) => source),
     heatmap: aggregateHeatmap(notes, now),
-    topFolders: aggregateTopFolders(notes)
+    topFolders: aggregateTopFolders(notes, folderPaths)
   };
 }
 
@@ -2014,7 +2049,11 @@ var VaultIndex = class {
       var _a2;
       return (_a2 = file.parent) == null ? void 0 : _a2.path;
     }).filter((path) => Boolean(path)))];
-    return aggregateMetrics(notes, attachmentPaths, folderPaths, Date.now(), this.recentDays(), this.threshold());
+    const unresolved = {};
+    for (const [source, targets] of Object.entries(this.app.metadataCache.unresolvedLinks)) {
+      if (this.included(source) && Object.keys(targets).length > 0) unresolved[source] = targets;
+    }
+    return aggregateMetrics(notes, attachmentPaths, folderPaths, Date.now(), this.recentDays(), this.threshold(), unresolved);
   }
   recentNotes(limit, filter = {}) {
     return this.app.vault.getMarkdownFiles().filter((file) => {
@@ -2228,7 +2267,7 @@ container.createEl("p", { text: String(params.title) });
     await this.reloadScripts();
     new import_obsidian9.Notice(`${t("\u5DF2\u65B0\u5EFA\u811A\u672C")}: ${filename}`);
   }
-  async renderTasks(container, host) {
+  async renderTasks(container, host, showCompleted = true) {
     if (!this.config.journalFolder) {
       container.createDiv({ text: t("\u6682\u65E0\u5185\u5BB9"), cls: "cw-empty" });
       return;
@@ -2248,7 +2287,8 @@ container.createEl("p", { text: String(params.title) });
         if (group) tasks.push({ file, line: index, text: task.text, group });
       });
     }
-    for (const group of ["today", "overdue", "completed"]) {
+    const groups = showCompleted ? ["today", "overdue", "completed"] : ["today", "overdue"];
+    for (const group of groups) {
       const section = container.createDiv({ cls: "cw-task-group" });
       section.createEl("h4", { text: group === "today" ? t("\u4ECA\u5929") : group === "overdue" ? t("\u9057\u7559") : t("\u6700\u8FD1\u5B8C\u6210") });
       const matching = tasks.filter((task) => task.group === group);

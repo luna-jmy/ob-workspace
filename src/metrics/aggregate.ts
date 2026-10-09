@@ -4,11 +4,11 @@ export interface NoteMetricInput { path: string; words: number; ctime: number; m
 export interface VaultMetrics {
   notes: number; attachments: number; folders: number; recent: number; words: number; links: number;
   notePaths: string[]; attachmentPaths: string[]; folderPaths: string[]; recentPaths: string[]; linkedPaths: string[];
-  orphanPaths: string[]; emptyPaths: string[]; shortPaths: string[];
+  orphanPaths: string[]; emptyPaths: string[]; shortPaths: string[]; brokenPaths: string[];
   heatmap: HeatmapDay[]; topFolders: FolderMetric[];
 }
 
-export function aggregateMetrics(notes: NoteMetricInput[], attachmentPaths: string[], folderPaths: string[], now: number, recentDays: number, shortThreshold: number): VaultMetrics {
+export function aggregateMetrics(notes: NoteMetricInput[], attachmentPaths: string[], folderPaths: string[], now: number, recentDays: number, shortThreshold: number, unresolved: Record<string, Record<string, number>> = {}): VaultMetrics {
   // 「最近新增」口径与热力图/最近新增组件一致：frontmatter created 优先，缺失回退 ctime，
   // 按天粒度比较（ctime 在 vault 复制/同步/迁移时会被重置，直接用它会在搬迁后暴涨）
   const cutoffKey = resolveCreatedDate(undefined, now - Math.max(1, recentDays) * 86_400_000);
@@ -25,6 +25,8 @@ export function aggregateMetrics(notes: NoteMetricInput[], attachmentPaths: stri
     orphanPaths: notes.filter((note) => note.outgoing === 0 && note.incoming === 0).map((note) => note.path),
     emptyPaths: notes.filter((note) => note.words === 0).map((note) => note.path),
     shortPaths: notes.filter((note) => note.words <= shortThreshold).map((note) => note.path),
-    heatmap: aggregateHeatmap(notes, now), topFolders: aggregateTopFolders(notes)
+    // 失效链接口径：正文含未解析链接（指向不存在笔记）的源笔记；采集层已按 excluded/扩展名过滤
+    brokenPaths: Object.entries(unresolved).filter(([, targets]) => Object.keys(targets).length > 0).map(([source]) => source),
+    heatmap: aggregateHeatmap(notes, now), topFolders: aggregateTopFolders(notes, folderPaths)
   };
 }

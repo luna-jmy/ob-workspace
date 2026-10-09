@@ -102,7 +102,7 @@ export default class CustomWorkspacePlugin extends Plugin {
     new Notice(`${t("已新建脚本")}: ${filename}`);
   }
 
-  async renderTasks(container: HTMLElement, host: Component): Promise<void> {
+  async renderTasks(container: HTMLElement, host: Component, showCompleted = true): Promise<void> {
     if (!this.config.journalFolder) { container.createDiv({ text: t("暂无内容"), cls: "cw-empty" }); return; }
     const today = moment().format("YYYY-MM-DD"); const cutoff = moment().subtract(this.config.recentDays - 1, "days").format("YYYY-MM-DD"); const tasks: TaskLocation[] = [];
     const files = this.app.vault.getMarkdownFiles().filter((file) => file.path.startsWith(`${this.config.journalFolder}/`));
@@ -111,7 +111,8 @@ export default class CustomWorkspacePlugin extends Plugin {
       const lines = (await this.app.vault.cachedRead(file)).split(/\r?\n/);
       lines.forEach((line, index) => { const task = parseTaskLine(line); if (!task) return; const group = classifyTask(task, fileDate, today, cutoff); if (group) tasks.push({ file, line: index, text: task.text, group }); });
     }
-    for (const group of ["today", "overdue", "completed"] as const) {
+    const groups = showCompleted ? ["today", "overdue", "completed"] as const : ["today", "overdue"] as const;
+    for (const group of groups) {
       const section = container.createDiv({ cls: "cw-task-group" });
       section.createEl("h4", { text: group === "today" ? t("今天") : group === "overdue" ? t("遗留") : t("最近完成") });
       const matching = tasks.filter((task) => task.group === group);

@@ -30,6 +30,12 @@ describe("metric aggregation", () => {
     expect(result).toMatchObject({ notes: 2, attachments: 3, folders: 2, words: 20, links: 2 });
     expect(result.orphanPaths).toEqual(["a.md"]); expect(result.shortPaths).toEqual(["a.md"]);
   });
+  it("lists source notes carrying unresolved links as broken paths", () => {
+    const base = [{ path: "a.md", words: 1, ctime: 1, mtime: 1, outgoing: 0, incoming: 0 }];
+    expect(aggregateMetrics(base, [], [], 1, 7, 10).brokenPaths).toEqual([]);
+    const unresolved = { "a.md": { "missing-note": 2 }, "b.md": {} };
+    expect(aggregateMetrics(base, [], [], 1, 7, 10, unresolved).brokenPaths).toEqual(["a.md"]);
+  });
   it("最近新增按 frontmatter created 优先，ctime 回退——vault 复制重置 ctime 不再暴涨", () => {
     const now = new Date(2026, 8, 26, 12).getTime();
     const weekAgo = new Date(2026, 8, 19).getTime();
@@ -67,6 +73,14 @@ describe("analytics", () => {
   it("summarizes top-level folders and root notes", () => {
     const result = aggregateTopFolders([{ path: "Areas/a.md", words: 10, ctime: 1, mtime: 1 }, { path: "Areas/b.md", words: 20, ctime: 1, mtime: 1 }, { path: "root.md", words: 5, ctime: 1, mtime: 1 }]);
     expect(result[0]).toMatchObject({ name: "Areas", notes: 2, words: 30 }); expect(result[1]).toMatchObject({ name: "", notes: 1, words: 5 });
+  });
+  it("counts distinct subfolder paths per top-level folder, ignoring top-level folders themselves and unknown roots", () => {
+    const notes = [{ path: "Areas/a.md", words: 1, ctime: 1, mtime: 1 }, { path: "root.md", words: 1, ctime: 1, mtime: 1 }];
+    const folders = ["Areas", "Areas/Sub", "Areas/Sub/Deep", "Other/NoNotes"];
+    const result = aggregateTopFolders(notes, folders);
+    expect(result.find((folder) => folder.name === "Areas")?.subfolders).toBe(2);
+    expect(result.find((folder) => folder.name === "")?.subfolders).toBe(0);
+    expect(result.some((folder) => folder.name === "Other")).toBe(false);
   });
   it("builds bounded line and area paths", () => {
     expect(linePathRange([0, 5, 10], 10, 1, 2)).toBe("M 50.00 24.00 L 100.00 0.00");

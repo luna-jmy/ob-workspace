@@ -34,7 +34,11 @@ export class VaultIndex {
     const files = this.app.vault.getFiles().filter((file) => this.included(file.path));
     const attachmentPaths = files.filter((file) => file.extension !== "md").map((file) => file.path);
     const folderPaths = [...new Set(files.map((file) => file.parent?.path).filter((path): path is string => Boolean(path)))];
-    return aggregateMetrics(notes, attachmentPaths, folderPaths, Date.now(), this.recentDays(), this.threshold());
+    const unresolved: Record<string, Record<string, number>> = {};
+    for (const [source, targets] of Object.entries(this.app.metadataCache.unresolvedLinks)) {
+      if (this.included(source) && Object.keys(targets).length > 0) unresolved[source] = targets;
+    }
+    return aggregateMetrics(notes, attachmentPaths, folderPaths, Date.now(), this.recentDays(), this.threshold(), unresolved);
   }
   recentNotes(limit: number, filter: NoteFilter = {}): TFile[] {
     return this.app.vault.getMarkdownFiles().filter((file) => {

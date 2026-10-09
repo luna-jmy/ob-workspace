@@ -1,4 +1,4 @@
-import { Component, getAllTags, MarkdownRenderer, Notice, Setting, setIcon, TAbstractFile, TFile, TFolder } from "obsidian";
+import { Component, getAllTags, MarkdownRenderer, Notice, Platform, Setting, setIcon, TAbstractFile, TFile, TFolder } from "obsidian";
 import type CustomWorkspacePlugin from "../main";
 import type { Block, ParamValue } from "../types";
 import type { ParamDefinition } from "../params/parser";
@@ -26,11 +26,11 @@ export interface ComponentDefinition {
   render(container: HTMLElement, block: Block, host: Component, plugin: CustomWorkspacePlugin): Promise<void>;
 }
 
-const STAT_KEYS = ["notes", "attachments", "folders", "recent", "words", "links", "orphans", "empty", "short"] as const;
-const DEFAULT_STAT_KEYS: StatKey[] = ["notes", "attachments", "folders", "recent", "words", "links", "orphans", "empty"];
+const STAT_KEYS = ["notes", "attachments", "folders", "recent", "words", "links", "orphans", "broken", "empty", "short"] as const;
+const DEFAULT_STAT_KEYS: StatKey[] = ["notes", "attachments", "folders", "recent", "words", "links", "orphans", "broken", "empty"];
 export type StatKey = typeof STAT_KEYS[number];
 export const STAT_LABELS: Record<StatKey, string> = {
-  notes: "笔记", attachments: "附件", folders: "文件夹", recent: "最近新增", words: "可读字数", links: "链接", orphans: "孤立笔记", empty: "空笔记", short: "短笔记"
+  notes: "笔记", attachments: "附件", folders: "文件夹", recent: "最近新增", words: "可读字数", links: "链接", orphans: "孤立笔记", broken: "失效链接", empty: "空笔记", short: "短笔记"
 };
 export function selectedStats(value: ParamValue | undefined): StatKey[] {
   if (!Array.isArray(value)) return [...DEFAULT_STAT_KEYS];
@@ -58,6 +58,7 @@ const vaultStats: ComponentDefinition = {
     if (selected.includes("words")) metric(grid, t("可读字数"), data.words, data.notePaths, plugin, host);
     if (selected.includes("links")) metric(grid, t("链接"), data.links, data.linkedPaths, plugin, host);
     if (selected.includes("orphans")) metric(grid, t("孤立笔记"), data.orphanPaths.length, data.orphanPaths, plugin, host);
+    if (selected.includes("broken")) metric(grid, t("失效链接"), data.brokenPaths.length, data.brokenPaths, plugin, host);
     if (selected.includes("empty")) metric(grid, t("空笔记"), data.emptyPaths.length, data.emptyPaths, plugin, host);
     if (selected.includes("short")) metric(grid, t("短笔记"), data.shortPaths.length, data.shortPaths, plugin, host);
   }
@@ -312,7 +313,8 @@ const activityHeatmap: ComponentDefinition = {
     summary.createSpan({ text: t("过去 12 个月") }); summary.createSpan({ text: `${total.toLocaleString()} ${useNotes ? t("篇笔记") : t("字")}` });
     const explanation = useNotes ? t("新增笔记优先使用 created，缺失时使用文件创建时间") : t("按系统修改日期归组当前字数");
     const unit = useNotes ? t("篇") : t("字");
-    const grid = container.createDiv({ cls: `cw-heatmap${block.span === 3 ? " cw-heatmap--square" : ""}`, attr: { role: "img", "aria-label": explanation } });
+    // 手机窄屏默认用正方形（1/4 宽）布局，桌面仍由块宽度决定
+    const grid = container.createDiv({ cls: `cw-heatmap${block.span === 3 || Platform.isMobile ? " cw-heatmap--square" : ""}`, attr: { role: "img", "aria-label": explanation } });
     const end = moment().startOf("day"); const start = end.clone().subtract(364, "days");
     for (let index = 0; index < start.day(); index += 1) grid.createSpan({ cls: "cw-heatmap__blank", attr: { "aria-hidden": "true" } });
     for (let index = 0; index < 365; index += 1) {
@@ -354,17 +356,23 @@ const linkTrend: ComponentDefinition = {
 };
 
 const structureAnalysis: ComponentDefinition = {
-  id: "builtin/structure", name: "知识库结构分析", icon: "folders", description: "", params: [],
-  async render(container, _block, host, plugin) {
+  id: "builtin/structure", name: "知识库结构分析", icon: "folders", description: "", params: [
+    { key: "showNotes", type: "boolean", defaultValue: true }, { key: "showWords", type: "boolean", defaultValue: true }, { key: "showSubfolders", type: "boolean", defaultValue: false }
+  ],
+  async render(container, block, host, plugin) {
     const data = await plugin.index.metrics();
     if (!data.topFolders.length) { container.createDiv({ text: t("暂无内容"), cls: "cw-empty" }); return; }
+    const showNotes = block.params.showNotes !== false; const showWords = block.params.showWords !== false; const showSubfolders = block.params.showSubfolders === true;
     container.createDiv({ text: t("按一级目录统计 Markdown 笔记"), cls: "cw-analytics-note cw-analytics-note--top" });
     const maximum = Math.max(1, ...data.topFolders.map((folder) => folder.notes)); const grid = container.createDiv({ cls: "cw-structure" });
     for (const folder of data.topFolders) {
       const label = folder.name || t("根目录"); const row = grid.createEl("button", { cls: "cw-structure__row", attr: { "aria-label": `${label}: ${folder.notes} ${t("篇")}` } });
       setIcon(row.createSpan({ cls: "cw-structure__icon" }), "folder"); const content = row.createSpan({ cls: "cw-structure__content" });
       const heading = content.createSpan({ cls: "cw-structure__heading" }); heading.createSpan({ text: label, cls: "cw-structure__name" });
-      const figures = heading.createSpan({ cls: "cw-structure__figures" }); figures.createSpan({ text: `${folder.notes.toLocaleString()} ${t("篇")}` }); figures.createSpan({ text: `${new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 }).format(folder.words)} ${t("字")}` });
+      const figures = heading.createSpan({ cls: "cw-structure__figures" });
+      if (showNotes) figures.createSpan({ text: `${folder.notes.toLocaleString()} ${t("篇")}` });
+      if (showWords) figures.createSpan({ text: `${new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 }).format(folder.words)} ${t("字")}` });
+      if (showSubfolders) figures.createSpan({ text: `${folder.subfolders.toLocaleString()} ${t("个子文件夹")}` });
       const track = content.createSpan({ cls: "cw-structure__track" }); const bar = track.createSpan({ cls: "cw-structure__bar" }); bar.style.setProperty("--cw-structure-width", `${folder.notes / maximum * 100}%`);
       setIcon(row.createSpan({ cls: "cw-structure__chevron" }), "chevron-right"); host.registerDomEvent(row, "click", () => new DetailModal(plugin.app, label, folder.paths, plugin).open());
     }
@@ -372,8 +380,8 @@ const structureAnalysis: ComponentDefinition = {
 };
 
 const todayTasks: ComponentDefinition = {
-  id: "builtin/today-tasks", name: "今日任务", icon: "list-checks", description: "", params: [],
-  async render(container, _block, host, plugin) { await plugin.renderTasks(container, host); }
+  id: "builtin/today-tasks", name: "今日任务", icon: "list-checks", description: "", params: [{ key: "showCompleted", type: "boolean", defaultValue: true }],
+  async render(container, block, host, plugin) { await plugin.renderTasks(container, host, block.params.showCompleted !== false); }
 };
 
 const BUILTINS = [vaultStats, todayTasks, quickJump, recentCreated, commandButtons, wordsTrend, activityHeatmap, linkTrend, structureAnalysis, templater, baseView, dataview, randomQuote, yearTimeline];
@@ -403,7 +411,8 @@ export function scriptDefinition(filename: string, name: string, icon: string, d
 export function addParamSetting(parent: HTMLElement, definition: ParamDefinition, block: Block, onChange: () => Promise<void>): void {
   const labels: Record<string, string> = {
     limit: t("显示条数"), days: t("最近天数"), folder: t("目录"), tag: t("标签"), frontmatterKey: t("Frontmatter 属性名"),
-    frontmatterValue: t("Frontmatter 属性值"), metric: t("统计方式"), range: t("统计范围")
+    frontmatterValue: t("Frontmatter 属性值"), metric: t("统计方式"), range: t("统计范围"),
+    showNotes: t("展示笔记数量"), showWords: t("展示字数"), showSubfolders: t("展示子文件夹数"), showCompleted: t("显示最近完成")
   };
   const optionLabels: Record<string, string> = { "字数": t("字数"), "新增笔记数": t("新增笔记数") };
   const setting = new Setting(parent).setName(labels[definition.key] ?? definition.key);
