@@ -9,7 +9,7 @@ import { moment } from "../services/date";
 import { DetailModal } from "../ui/detail-modal";
 import { activityLevel, areaPath, linePathRange } from "../metrics/analytics";
 import { matchesNoteFilter } from "../metrics/note-filter";
-import { cleanQuoteText, formatBookName, matchingQuoteLines, randomOf } from "../quotes/parser";
+import { cleanQuoteText, formatBookName, matchingQuoteLines, parseTagList, randomOf } from "../quotes/parser";
 import { svgClasses } from "../ui/classes";
 import { dailyWordChanges } from "../history/history";
 
@@ -183,11 +183,11 @@ const randomQuote: ComponentDefinition = {
   ],
   async render(container, block, host, plugin) {
     const folder = paramString(block.params.folder).replace(/^\/+|\/+$/g, "");
-    const rawTag = paramString(block.params.tag).replace(/^#/, "");
-    if (!folder || !rawTag) { unavailable(container, t("请在编辑模式配置目录与标签")); return; }
-    const tag = `#${rawTag}`;
+    const rawTags = parseTagList(paramString(block.params.tag));
+    if (!folder || !rawTags.length) { unavailable(container, t("请在编辑模式配置目录与标签")); return; }
+    const tags = rawTags.map((rawTag) => `#${rawTag}`);
     const wrap = container.createDiv({ cls: "cw-quote" });
-    // 只遍历所设目录的子树（不整库前缀过滤）；标签匹配复用 note-filter，
+    // 只遍历所设目录的子树（不整库前缀过滤）；标签匹配复用 note-filter（多标签任一命中），
     // 候选在本次渲染内缓存——「换一条」不重扫；文件增删改由全局刷新重建预览、天然失效
     const root = plugin.app.vault.getAbstractFileByPath(folder);
     const pages: TFile[] = [];
@@ -198,20 +198,22 @@ const randomQuote: ComponentDefinition = {
       if (node instanceof TFolder) { stack.push(...node.children); continue; }
       if (!(node instanceof TFile) || node.extension !== "md") continue;
       const cache = plugin.app.metadataCache.getFileCache(node);
-      if (matchesNoteFilter({ path: node.path, tags: cache ? getAllTags(cache) ?? [] : [], frontmatter: cache?.frontmatter }, { tag: rawTag })) pages.push(node);
+      if (rawTags.some((rawTag) => matchesNoteFilter({ path: node.path, tags: cache ? getAllTags(cache) ?? [] : [], frontmatter: cache?.frontmatter }, { tag: rawTag }))) pages.push(node);
     }
     const draw = async (): Promise<void> => {
       wrap.empty();
       const page = randomOf(pages);
       if (!page) { wrap.createDiv({ text: t("暂无书摘可显示"), cls: "cw-empty" }); return; }
-      const raw = randomOf(matchingQuoteLines(await plugin.app.vault.cachedRead(page), tag));
+      const raw = randomOf(matchingQuoteLines(await plugin.app.vault.cachedRead(page), tags));
       if (!raw) { wrap.createDiv({ text: t("笔记中没有匹配标签的行"), cls: "cw-empty" }); return; }
       const quote = cleanQuoteText(raw);
-      const source = formatBookName(page.name);
-      // 固定模板直建 DOM（blockquote > p + p>em），不走 MarkdownRenderer 管线——那是每轮重绘的主要开销
+      const source = formatBookName(page.basename);
+      // 固定模板直建 DOM（blockquote > p + p>em）；引文含行内 Markdown 标记（加粗/高亮等）
+      // 时改走 MarkdownRenderer 渲染——纯文本仍零管线开销，71c025 的提速对多数重绘成立
       const body = wrap.createDiv({ cls: "cw-quote__body" });
       const quoteBlock = body.createEl("blockquote");
-      quoteBlock.createEl("p", { text: quote });
+      if (/[*_`~=[\]!<>\\]/.test(quote)) await MarkdownRenderer.render(plugin.app, quote, quoteBlock, page.path, host);
+      else quoteBlock.createEl("p", { text: quote });
       const sourceLine = quoteBlock.createEl("p");
       sourceLine.appendText("— ");
       sourceLine.createEl("em", { text: source });
@@ -418,13 +420,15 @@ export function addParamSetting(parent: HTMLElement, definition: ParamDefinition
   const optionLabels: Record<string, string> = { "字数": t("字数"), "新增笔记数": t("新增笔记数") };
   const setting = new Setting(parent).setName(labels[definition.key] ?? definition.key);
   const value = block.params[definition.key] ?? definition.defaultValue;
+  // 随机书摘的标签支持逗号分隔多选，其余 tag 参数仍是单标签——提示只给书摘的
+  const multiTagHint = definition.type === "tag" && block.componentId === "builtin/random-quote";
   if (definition.type === "boolean") setting.addToggle((toggle) => toggle.setValue(Boolean(value)).onChange(async (next) => { block.params[definition.key] = next; await onChange(); }));
   else if (definition.type === "number") setting.addText((text) => text.setValue(paramString(value, "0")).onChange(async (next) => { const parsed = Number(next); if (Number.isFinite(parsed)) { block.params[definition.key] = parsed; await onChange(); } }));
   else if (definition.type.startsWith("select:")) setting.addDropdown((dropdown) => {
     for (const option of definition.type.slice(7).split(",")) dropdown.addOption(option, optionLabels[option] ?? option);
     dropdown.setValue(paramString(value)).onChange(async (next) => { block.params[definition.key] = next; await onChange(); });
   });
-  else setting.addText((text) => text.setValue(paramString(value)).setPlaceholder(t("请输入值")).onChange(async (next) => { block.params[definition.key] = next; await onChange(); }));
+  else setting.addText((text) => text.setValue(paramString(value)).setPlaceholder(multiTagHint ? t("多个标签用逗号分隔") : t("请输入值")).onChange(async (next) => { block.params[definition.key] = next; await onChange(); }));
 }
 
 function unavailable(container: HTMLElement, message: string): void { container.createDiv({ text: message, cls: "cw-unavailable" }); }

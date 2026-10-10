@@ -9,7 +9,7 @@ import { DEFAULT_DATA, mergeSettings, migrateData, type Block } from "../src/typ
 import { activityLevel, aggregateHeatmap, aggregateTopFolders, areaPath, linePathRange, resolveCreatedDate } from "../src/metrics/analytics";
 import { svgClasses } from "../src/ui/classes";
 import { filterNotePaths, matchesNoteFilter } from "../src/metrics/note-filter";
-import { cleanQuoteText, formatBookName, matchingQuoteLines, randomOf } from "../src/quotes/parser";
+import { cleanQuoteText, formatBookName, matchingQuoteLines, parseTagList, randomOf } from "../src/quotes/parser";
 import { templatePathCandidates } from "../src/params/template-path";
 
 describe("markdown text metrics", () => {
@@ -242,10 +242,17 @@ describe("settings migration", () => {
 });
 
 describe("random quote parsing", () => {
-  it("keeps only lines carrying the tag and tolerates CRLF", () => {
-    const text = "前言行\r\n一句书摘 #金句\r\n别的行\n另一句 #金句 #书摘";
-    expect(matchingQuoteLines(text, "#金句")).toEqual(["一句书摘 #金句", "另一句 #金句 #书摘"]);
-    expect(matchingQuoteLines(text, "")).toEqual([]);
+  it("keeps only lines carrying any of the tags and tolerates CRLF", () => {
+    const text = "前言行\r\n一句书摘 #金句\r\n别的行\n另一句 #金句 #书摘\n画线句 #划线";
+    expect(matchingQuoteLines(text, ["#金句"])).toEqual(["一句书摘 #金句", "另一句 #金句 #书摘"]);
+    expect(matchingQuoteLines(text, ["#金句", "#划线"])).toEqual(["一句书摘 #金句", "另一句 #金句 #书摘", "画线句 #划线"]);
+    expect(matchingQuoteLines(text, [])).toEqual([]);
+    expect(matchingQuoteLines(text, ["", ""])).toEqual([]);
+  });
+  it("parses comma-separated tag lists (ASCII/full-width, stray #, blanks)", () => {
+    expect(parseTagList("金句, 书摘")).toEqual(["金句", "书摘"]);
+    expect(parseTagList("#金句，书摘，，摘抄")).toEqual(["金句", "书摘", "摘抄"]);
+    expect(parseTagList("  ")).toEqual([]);
   });
   it("strips tags, inline fields and markers, falling back to the raw line when emptied", () => {
     expect(cleanQuoteText("- > 星星发光 #金句 [位置:: p.12]  是为了    让每个人找到自己的星")).toBe("星星发光 是为了 让每个人找到自己的星");

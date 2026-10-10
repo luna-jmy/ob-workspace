@@ -136,6 +136,9 @@
 /* ── 随机书摘 ── */
 .cw-root .cw-quote__body { border-left: 3px solid var(--background-modifier-border); padding-left: var(--size-4-2); }
 .cw-root .cw-quote__body blockquote { margin: 0; }
+/* ==高亮== 走 MarkdownRenderer 后是 <mark>：宿主的高亮底色作用域在 markdown 容器里，
+   仪表盘容器自己补一条，用官方变量保持与阅读视图一致 */
+.cw-root .cw-quote__body mark { background-color: var(--text-highlight-bg); color: inherit; }
 .cw-root .cw-quote__tools { display: flex; justify-content: flex-end; gap: var(--size-2-1); margin-top: var(--size-2-2); }
 .cw-root .cw-quote__btn { display: inline-flex; padding: var(--size-2-1); background: transparent; border: 1px solid var(--background-modifier-border); border-radius: var(--radius-s); color: var(--text-muted); cursor: pointer; }
 .cw-root .cw-quote__btn:hover { color: var(--text-normal); border-color: var(--interactive-accent); }

@@ -154,6 +154,7 @@ export const en: Record<string, string> = {
   "笔记中没有匹配标签的行": "No lines with that tag in the note",
   "复制书摘": "Copy quote",
   "换一条": "Another one",
+  "多个标签用逗号分隔": "Separate multiple tags with commas",
   "已复制到剪贴板": "Copied to clipboard",
   "年份（0 为今年）": "Year (0 = current)",
   "今天线图标": "Today-line icon",
