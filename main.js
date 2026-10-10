@@ -184,6 +184,7 @@ var en = {
   "\u7B14\u8BB0\u4E2D\u6CA1\u6709\u5339\u914D\u6807\u7B7E\u7684\u884C": "No lines with that tag in the note",
   "\u590D\u5236\u4E66\u6458": "Copy quote",
   "\u6362\u4E00\u6761": "Another one",
+  "\u591A\u4E2A\u6807\u7B7E\u7528\u9017\u53F7\u5206\u9694": "Separate multiple tags with commas",
   "\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F": "Copied to clipboard",
   "\u5E74\u4EFD\uFF080 \u4E3A\u4ECA\u5E74\uFF09": "Year (0 = current)",
   "\u4ECA\u5929\u7EBF\u56FE\u6807": "Today-line icon",
@@ -527,9 +528,13 @@ function areaPath(values, maximum, width = 100, height = 48) {
 function formatBookName(fileName) {
   return `\u300A${fileName.replace(/^【.*?】/, "").trim()}\u300B`;
 }
-function matchingQuoteLines(text, tag) {
-  if (!tag) return [];
-  return text.split(/\r?\n/).filter((line) => line.includes(tag));
+function parseTagList(raw) {
+  return raw.split(/[,，]/).map((piece) => piece.trim().replace(/^#/, "").trim()).filter((piece) => piece !== "");
+}
+function matchingQuoteLines(text, tags) {
+  const list = tags.filter((tag) => tag !== "");
+  if (!list.length) return [];
+  return text.split(/\r?\n/).filter((line) => list.some((tag) => line.includes(tag)));
 }
 function cleanQuoteText(raw) {
   const cleaned = raw.replace(/#[^\s#]+/g, "").replace(/\[.*?::.*?\]/g, "").replace(/^[#\-*\s>]+/, "").replace(/\s{2,}/g, " ").trim();
@@ -846,14 +851,13 @@ var randomQuote = {
     { key: "tag", type: "tag", defaultValue: "" }
   ],
   async render(container, block, host, plugin) {
-    var _a;
     const folder = paramString(block.params.folder).replace(/^\/+|\/+$/g, "");
-    const rawTag = paramString(block.params.tag).replace(/^#/, "");
-    if (!folder || !rawTag) {
+    const rawTags = parseTagList(paramString(block.params.tag));
+    if (!folder || !rawTags.length) {
       unavailable(container, t("\u8BF7\u5728\u7F16\u8F91\u6A21\u5F0F\u914D\u7F6E\u76EE\u5F55\u4E0E\u6807\u7B7E"));
       return;
     }
-    const tag = `#${rawTag}`;
+    const tags = rawTags.map((rawTag) => `#${rawTag}`);
     const wrap = container.createDiv({ cls: "cw-quote" });
     const root = plugin.app.vault.getAbstractFileByPath(folder);
     const pages = [];
@@ -867,7 +871,10 @@ var randomQuote = {
       }
       if (!(node instanceof import_obsidian4.TFile) || node.extension !== "md") continue;
       const cache = plugin.app.metadataCache.getFileCache(node);
-      if (matchesNoteFilter({ path: node.path, tags: cache ? (_a = (0, import_obsidian4.getAllTags)(cache)) != null ? _a : [] : [], frontmatter: cache == null ? void 0 : cache.frontmatter }, { tag: rawTag })) pages.push(node);
+      if (rawTags.some((rawTag) => {
+        var _a;
+        return matchesNoteFilter({ path: node.path, tags: cache ? (_a = (0, import_obsidian4.getAllTags)(cache)) != null ? _a : [] : [], frontmatter: cache == null ? void 0 : cache.frontmatter }, { tag: rawTag });
+      })) pages.push(node);
     }
     const draw = async () => {
       wrap.empty();
@@ -876,16 +883,17 @@ var randomQuote = {
         wrap.createDiv({ text: t("\u6682\u65E0\u4E66\u6458\u53EF\u663E\u793A"), cls: "cw-empty" });
         return;
       }
-      const raw = randomOf(matchingQuoteLines(await plugin.app.vault.cachedRead(page), tag));
+      const raw = randomOf(matchingQuoteLines(await plugin.app.vault.cachedRead(page), tags));
       if (!raw) {
         wrap.createDiv({ text: t("\u7B14\u8BB0\u4E2D\u6CA1\u6709\u5339\u914D\u6807\u7B7E\u7684\u884C"), cls: "cw-empty" });
         return;
       }
       const quote = cleanQuoteText(raw);
-      const source = formatBookName(page.name);
+      const source = formatBookName(page.basename);
       const body = wrap.createDiv({ cls: "cw-quote__body" });
       const quoteBlock = body.createEl("blockquote");
-      quoteBlock.createEl("p", { text: quote });
+      if (/[*_`~=[\]!<>\\]/.test(quote)) await import_obsidian4.MarkdownRenderer.render(plugin.app, quote, quoteBlock, page.path, host);
+      else quoteBlock.createEl("p", { text: quote });
       const sourceLine = quoteBlock.createEl("p");
       sourceLine.appendText("\u2014 ");
       sourceLine.createEl("em", { text: source });
@@ -893,8 +901,8 @@ var randomQuote = {
       const copy = tools.createEl("button", { cls: "cw-quote__btn", attr: { "aria-label": t("\u590D\u5236\u4E66\u6458") } });
       (0, import_obsidian4.setIcon)(copy, "copy");
       host.registerDomEvent(copy, "click", () => {
-        var _a2;
-        void ((_a2 = wrap.ownerDocument.defaultView) == null ? void 0 : _a2.navigator.clipboard.writeText(`${quote}
+        var _a;
+        void ((_a = wrap.ownerDocument.defaultView) == null ? void 0 : _a.navigator.clipboard.writeText(`${quote}
 
 \u2014 ${source}`));
         new import_obsidian4.Notice(t("\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F"));
@@ -1195,6 +1203,7 @@ function addParamSetting(parent, definition, block, onChange) {
   const optionLabels = { "\u5B57\u6570": t("\u5B57\u6570"), "\u65B0\u589E\u7B14\u8BB0\u6570": t("\u65B0\u589E\u7B14\u8BB0\u6570") };
   const setting = new import_obsidian4.Setting(parent).setName((_a = labels[definition.key]) != null ? _a : definition.key);
   const value = (_b = block.params[definition.key]) != null ? _b : definition.defaultValue;
+  const multiTagHint = definition.type === "tag" && block.componentId === "builtin/random-quote";
   if (definition.type === "boolean") setting.addToggle((toggle) => toggle.setValue(Boolean(value)).onChange(async (next) => {
     block.params[definition.key] = next;
     await onChange();
@@ -1214,7 +1223,7 @@ function addParamSetting(parent, definition, block, onChange) {
       await onChange();
     });
   });
-  else setting.addText((text) => text.setValue(paramString(value)).setPlaceholder(t("\u8BF7\u8F93\u5165\u503C")).onChange(async (next) => {
+  else setting.addText((text) => text.setValue(paramString(value)).setPlaceholder(multiTagHint ? t("\u591A\u4E2A\u6807\u7B7E\u7528\u9017\u53F7\u5206\u9694") : t("\u8BF7\u8F93\u5165\u503C")).onChange(async (next) => {
     block.params[definition.key] = next;
     await onChange();
   }));

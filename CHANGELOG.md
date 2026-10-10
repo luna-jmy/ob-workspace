@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.1.2
+
+### Changed
+
+- Random quote: inline Markdown in quotes (bold, ==highlight==, …) is now
+  rendered. Plain-text quotes still bypass the Markdown pipeline, so the 1.0.2
+  redraw speedup holds for quotes without markup.
+- Random quote: the tag parameter accepts multiple comma-separated tags
+  (ASCII or full-width); a note or line matching any of them becomes a
+  candidate. The edit-panel tag field carries a hint.
+
+### Fixed
+
+- Random quote: the source line used the note's file name including the
+  `.md` extension; it now shows the book title only.
+
 ## 1.1.1
 
 ### Added
