@@ -39,7 +39,7 @@ var en = {
   "\u6DFB\u52A0\u7EC4\u4EF6": "Add component",
   "\u4ED3\u5E93\u7EDF\u8BA1": "Vault stats",
   "\u4ECA\u65E5\u4EFB\u52A1": "Today's tasks",
-  "\u5FEB\u901F\u8DF3\u8F6C": "Quick jump",
+  "\u6700\u8FD1\u66F4\u65B0": "Recently updated",
   "\u547D\u4EE4\u6309\u94AE": "Command buttons",
   "\u6BCF\u65E5\u5B57\u6570\u53D8\u5316": "Daily word change",
   "\u5199\u4F5C\u70ED\u529B\u56FE": "Writing heatmap",
@@ -185,6 +185,7 @@ var en = {
   "\u590D\u5236\u4E66\u6458": "Copy quote",
   "\u6362\u4E00\u6761": "Another one",
   "\u591A\u4E2A\u6807\u7B7E\u7528\u9017\u53F7\u5206\u9694": "Separate multiple tags with commas",
+  "\u76EE\u5F55\u8DEF\u5F84\uFF0C\u591A\u4E2A\u7528\u9017\u53F7\u5206\u9694": "Folder path; separate multiple entries with commas",
   "\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F": "Copied to clipboard",
   "\u5E74\u4EFD\uFF080 \u4E3A\u4ECA\u5E74\uFF09": "Year (0 = current)",
   "\u4ECA\u5929\u7EBF\u56FE\u6807": "Today-line icon",
@@ -355,14 +356,17 @@ function matchesValue(value, expected) {
   if (typeof value === "number" || typeof value === "boolean") return value.toString().toLocaleLowerCase() === expected.toLocaleLowerCase();
   return false;
 }
+function parseFolderList(raw) {
+  return (raw != null ? raw : "").split(/[,，]/).map((piece) => piece.trim().replace(/^\/+|\/+$/g, "")).filter((piece) => piece !== "");
+}
 function matchesNoteFilter(note, filter) {
-  var _a, _b, _c, _d, _e;
-  const folder = (_a = filter.folder) == null ? void 0 : _a.replace(/^\/+|\/+$/g, "");
-  if (folder && !note.path.startsWith(`${folder}/`)) return false;
+  var _a, _b, _c, _d;
+  const folders = parseFolderList(filter.folder);
+  if (folders.length && !folders.some((folder) => note.path.startsWith(`${folder}/`))) return false;
   const tag = filter.tag ? `#${filter.tag.replace(/^#/, "")}`.toLocaleLowerCase() : "";
   if (tag && !note.tags.some((item) => item.toLocaleLowerCase() === tag)) return false;
-  const key = (_c = (_b = filter.frontmatterKey) == null ? void 0 : _b.trim()) != null ? _c : "";
-  const expected = (_e = (_d = filter.frontmatterValue) == null ? void 0 : _d.trim()) != null ? _e : "";
+  const key = (_b = (_a = filter.frontmatterKey) == null ? void 0 : _a.trim()) != null ? _b : "";
+  const expected = (_d = (_c = filter.frontmatterValue) == null ? void 0 : _c.trim()) != null ? _d : "";
   if (key && !matchesValue(readFrontmatterValue(note.frontmatter, key), expected)) return false;
   return true;
 }
@@ -662,9 +666,9 @@ var vaultStats = {
     if (selected.includes("short")) metric(grid, t("\u77ED\u7B14\u8BB0"), data.shortPaths.length, data.shortPaths, plugin, host);
   }
 };
-var quickJump = {
+var recentlyUpdated = {
   id: "builtin/quick-jump",
-  name: "\u5FEB\u901F\u8DF3\u8F6C",
+  name: "\u6700\u8FD1\u66F4\u65B0",
   icon: "files",
   description: "",
   params: [
@@ -1140,7 +1144,7 @@ var todayTasks = {
     await plugin.renderTasks(container, host, block.params.showCompleted !== false);
   }
 };
-var BUILTINS = [vaultStats, todayTasks, quickJump, recentCreated, commandButtons, wordsTrend, activityHeatmap, linkTrend, structureAnalysis, templater, baseView, dataview, randomQuote, yearTimeline];
+var BUILTINS = [vaultStats, todayTasks, recentlyUpdated, recentCreated, commandButtons, wordsTrend, activityHeatmap, linkTrend, structureAnalysis, templater, baseView, dataview, randomQuote, yearTimeline];
 function builtinDefinitions() {
   return BUILTINS;
 }
@@ -1152,7 +1156,7 @@ function componentName(definition) {
   const names = {
     "builtin/vault-stats": t("\u4ED3\u5E93\u7EDF\u8BA1"),
     "builtin/today-tasks": t("\u4ECA\u65E5\u4EFB\u52A1"),
-    "builtin/quick-jump": t("\u5FEB\u901F\u8DF3\u8F6C"),
+    "builtin/quick-jump": t("\u6700\u8FD1\u66F4\u65B0"),
     "builtin/command-buttons": t("\u547D\u4EE4\u6309\u94AE"),
     "builtin/trends": t("\u6BCF\u65E5\u5B57\u6570\u53D8\u5316"),
     "builtin/activity-heatmap": t("\u5199\u4F5C\u70ED\u529B\u56FE"),
@@ -1204,6 +1208,7 @@ function addParamSetting(parent, definition, block, onChange) {
   const setting = new import_obsidian4.Setting(parent).setName((_a = labels[definition.key]) != null ? _a : definition.key);
   const value = (_b = block.params[definition.key]) != null ? _b : definition.defaultValue;
   const multiTagHint = definition.type === "tag" && block.componentId === "builtin/random-quote";
+  const folderHint = definition.type === "folder";
   if (definition.type === "boolean") setting.addToggle((toggle) => toggle.setValue(Boolean(value)).onChange(async (next) => {
     block.params[definition.key] = next;
     await onChange();
@@ -1223,7 +1228,7 @@ function addParamSetting(parent, definition, block, onChange) {
       await onChange();
     });
   });
-  else setting.addText((text) => text.setValue(paramString(value)).setPlaceholder(multiTagHint ? t("\u591A\u4E2A\u6807\u7B7E\u7528\u9017\u53F7\u5206\u9694") : t("\u8BF7\u8F93\u5165\u503C")).onChange(async (next) => {
+  else setting.addText((text) => text.setValue(paramString(value)).setPlaceholder(multiTagHint ? t("\u591A\u4E2A\u6807\u7B7E\u7528\u9017\u53F7\u5206\u9694") : folderHint ? t("\u76EE\u5F55\u8DEF\u5F84\uFF0C\u591A\u4E2A\u7528\u9017\u53F7\u5206\u9694") : t("\u8BF7\u8F93\u5165\u503C")).onChange(async (next) => {
     block.params[definition.key] = next;
     await onChange();
   }));
@@ -2087,7 +2092,7 @@ var VaultIndex = class {
   }
   /**
    * 最近新增笔记：created 取 frontmatter.created（解析失败回退文件 ctime），
-   * 限定最近 days 天内、按 created 倒序、截取 limit 条。支持与快速跳转同款的筛选。
+   * 限定最近 days 天内、按 created 倒序、截取 limit 条。支持与最近更新同款的筛选。
    */
   recentCreatedNotes(limit, days, filter = {}) {
     var _a, _b;
