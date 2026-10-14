@@ -104,6 +104,19 @@ describe("quick-jump filters", () => {
     expect(matchesNoteFilter(note, { folder: "300 Resources", tag: "reading" })).toBe(true);
     expect(matchesNoteFilter(note, { tag: "#missing" })).toBe(false);
   });
+  it("matches multiple comma-separated folders (ASCII and full-width commas)", () => {
+    expect(matchesNoteFilter(note, { folder: "300 Resources, 000 Inbox" })).toBe(true);
+    expect(matchesNoteFilter({ ...note, path: "000 Inbox/clip.md" }, { folder: "300 Resources，000 Inbox" })).toBe(true);
+    expect(matchesNoteFilter({ ...note, path: "200 Areas/x.md" }, { folder: "300 Resources，000 Inbox" })).toBe(false);
+  });
+  it("matches nested folder paths by prefix and normalizes slashes", () => {
+    expect(matchesNoteFilter({ ...note, path: "000 Inbox/Clippings/clip.md" }, { folder: "000 Inbox/Clippings" })).toBe(true);
+    expect(matchesNoteFilter({ ...note, path: "000 Inbox/Clippings2/x.md" }, { folder: "000 Inbox/Clippings" })).toBe(false);
+    expect(matchesNoteFilter(note, { folder: "300 Resources/" })).toBe(true);
+  });
+  it("treats an empty folder list as no filter", () => {
+    expect(matchesNoteFilter(note, { folder: " , " })).toBe(true);
+  });
   it("matches scalar, array, and dotted frontmatter values", () => {
     expect(matchesNoteFilter(note, { frontmatterKey: "status", frontmatterValue: "ACTIVE" })).toBe(true);
     expect(matchesNoteFilter(note, { frontmatterKey: "owner", frontmatterValue: "Luna" })).toBe(true);

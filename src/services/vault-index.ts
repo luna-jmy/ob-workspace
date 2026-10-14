@@ -52,7 +52,7 @@ export class VaultIndex {
   find(path: string): TFile | null { const file: TAbstractFile | null = this.app.vault.getAbstractFileByPath(path); return file instanceof TFile ? file : null; }
   /**
    * 最近新增笔记：created 取 frontmatter.created（解析失败回退文件 ctime），
-   * 限定最近 days 天内、按 created 倒序、截取 limit 条。支持与快速跳转同款的筛选。
+   * 限定最近 days 天内、按 created 倒序、截取 limit 条。支持与最近更新同款的筛选。
    */
   recentCreatedNotes(limit: number, days: number, filter: NoteFilter = {}): { file: TFile; created: number }[] {
     const cutoff = Date.now() - Math.max(1, days) * 86400000;

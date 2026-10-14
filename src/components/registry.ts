@@ -65,8 +65,9 @@ const vaultStats: ComponentDefinition = {
   }
 };
 
-const quickJump: ComponentDefinition = {
-  id: "builtin/quick-jump", name: "快速跳转", icon: "files", description: "", params: [
+// id 冻结为 builtin/quick-jump（历史沿用，改名只动显示名——已配置的块按 id 关联）
+const recentlyUpdated: ComponentDefinition = {
+  id: "builtin/quick-jump", name: "最近更新", icon: "files", description: "", params: [
     { key: "limit", type: "number", defaultValue: 8 }, { key: "folder", type: "folder", defaultValue: "" },
     { key: "tag", type: "tag", defaultValue: "" }, { key: "frontmatterKey", type: "text", defaultValue: "" },
     { key: "frontmatterValue", type: "text", defaultValue: "" }
@@ -387,13 +388,13 @@ const todayTasks: ComponentDefinition = {
   async render(container, block, host, plugin) { await plugin.renderTasks(container, host, block.params.showCompleted !== false); }
 };
 
-const BUILTINS = [vaultStats, todayTasks, quickJump, recentCreated, commandButtons, wordsTrend, activityHeatmap, linkTrend, structureAnalysis, templater, baseView, dataview, randomQuote, yearTimeline];
+const BUILTINS = [vaultStats, todayTasks, recentlyUpdated, recentCreated, commandButtons, wordsTrend, activityHeatmap, linkTrend, structureAnalysis, templater, baseView, dataview, randomQuote, yearTimeline];
 
 export function builtinDefinitions(): ComponentDefinition[] { return BUILTINS; }
 export function builtinById(id: string): ComponentDefinition | undefined { return BUILTINS.find((definition) => definition.id === id); }
 export function componentName(definition: ComponentDefinition): string {
   const names: Record<string, string> = {
-    "builtin/vault-stats": t("仓库统计"), "builtin/today-tasks": t("今日任务"), "builtin/quick-jump": t("快速跳转"),
+    "builtin/vault-stats": t("仓库统计"), "builtin/today-tasks": t("今日任务"), "builtin/quick-jump": t("最近更新"),
     "builtin/command-buttons": t("命令按钮"), "builtin/trends": t("每日字数变化"), "builtin/activity-heatmap": t("写作热力图"),
     "builtin/link-trend": t("双链统计图"), "builtin/structure": t("知识库结构分析"), "builtin/quick-create": t("快速新建"), "builtin/base": t("Base 视图"),
     "builtin/dataview": t("Dataview 查询"), "builtin/recent-created": t("最近新增"),
@@ -422,13 +423,15 @@ export function addParamSetting(parent: HTMLElement, definition: ParamDefinition
   const value = block.params[definition.key] ?? definition.defaultValue;
   // 随机书摘的标签支持逗号分隔多选，其余 tag 参数仍是单标签——提示只给书摘的
   const multiTagHint = definition.type === "tag" && block.componentId === "builtin/random-quote";
+  // 目录参数支持逗号分隔多选（前缀匹配，可用多级路径）——提示给所有 folder 参数
+  const folderHint = definition.type === "folder";
   if (definition.type === "boolean") setting.addToggle((toggle) => toggle.setValue(Boolean(value)).onChange(async (next) => { block.params[definition.key] = next; await onChange(); }));
   else if (definition.type === "number") setting.addText((text) => text.setValue(paramString(value, "0")).onChange(async (next) => { const parsed = Number(next); if (Number.isFinite(parsed)) { block.params[definition.key] = parsed; await onChange(); } }));
   else if (definition.type.startsWith("select:")) setting.addDropdown((dropdown) => {
     for (const option of definition.type.slice(7).split(",")) dropdown.addOption(option, optionLabels[option] ?? option);
     dropdown.setValue(paramString(value)).onChange(async (next) => { block.params[definition.key] = next; await onChange(); });
   });
-  else setting.addText((text) => text.setValue(paramString(value)).setPlaceholder(multiTagHint ? t("多个标签用逗号分隔") : t("请输入值")).onChange(async (next) => { block.params[definition.key] = next; await onChange(); }));
+  else setting.addText((text) => text.setValue(paramString(value)).setPlaceholder(multiTagHint ? t("多个标签用逗号分隔") : folderHint ? t("目录路径，多个用逗号分隔") : t("请输入值")).onChange(async (next) => { block.params[definition.key] = next; await onChange(); }));
 }
 
 function unavailable(container: HTMLElement, message: string): void { container.createDiv({ text: message, cls: "cw-unavailable" }); }

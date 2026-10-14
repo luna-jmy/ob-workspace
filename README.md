@@ -10,11 +10,11 @@ Enable the plugin, then use the ribbon icon or **Open workspace** command. Choos
 
 The plugin does not use the network, telemetry, accounts, or automatic updates. Native components do not require other plugins. Tasks are read-only: selecting one opens its source line.
 
-Quick Jump can combine folder, tag, and frontmatter key/value filters. For new-note counts, the writing heatmap prefers each note's `created` frontmatter value and falls back to filesystem creation time; word-count mode groups each note's current readable word total by filesystem modification date. It does not claim to reconstruct historical writing volume.
+Recently Updated lists your most recently modified notes and can combine folder, tag, and frontmatter key/value filters (folders accept comma-separated entries and nested paths such as `000 Inbox/Clippings`). For new-note counts, the writing heatmap prefers each note's `created` frontmatter value and falls back to filesystem creation time; word-count mode groups each note's current readable word total by filesystem modification date. It does not claim to reconstruct historical writing volume.
 
 ## Dependencies
 
-None required. All native components — statistics, journal tasks, quick links, writing activity, link trends, folder analysis, and command buttons — work without any other plugin. Optional integrations: Dataview (Dataview query component), Templater (quick note creation), and Obsidian's built-in Bases renderer (Bases file component). Each optional integration degrades to an explanatory placeholder when it is unavailable.
+None required. All native components — statistics, journal tasks, recently updated, writing activity, link trends, folder analysis, and command buttons — work without any other plugin. Optional integrations: Dataview (Dataview query component), Templater (quick note creation), and Obsidian's built-in Bases renderer (Bases file component). Each optional integration degrades to an explanatory placeholder when it is unavailable.
 
 ## Optional integrations
 

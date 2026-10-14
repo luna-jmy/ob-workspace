@@ -28,9 +28,17 @@ function matchesValue(value: unknown, expected: string): boolean {
   return false;
 }
 
+/** 目录参数解析：逗号 / 全角逗号分隔多个目录，逐段去空白与首尾斜杠，空段丢弃。 */
+export function parseFolderList(raw: string | undefined): string[] {
+  return (raw ?? "")
+    .split(/[,，]/)
+    .map((piece) => piece.trim().replace(/^\/+|\/+$/g, ""))
+    .filter((piece) => piece !== "");
+}
+
 export function matchesNoteFilter(note: FilterableNote, filter: NoteFilter): boolean {
-  const folder = filter.folder?.replace(/^\/+|\/+$/g, "");
-  if (folder && !note.path.startsWith(`${folder}/`)) return false;
+  const folders = parseFolderList(filter.folder);
+  if (folders.length && !folders.some((folder) => note.path.startsWith(`${folder}/`))) return false;
   const tag = filter.tag ? `#${filter.tag.replace(/^#/, "")}`.toLocaleLowerCase() : "";
   if (tag && !note.tags.some((item) => item.toLocaleLowerCase() === tag)) return false;
   const key = filter.frontmatterKey?.trim() ?? ""; const expected = filter.frontmatterValue?.trim() ?? "";

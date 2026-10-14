@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Recently Updated (formerly "Quick jump"): the component's display name now
+  matches what it actually lists — your most recently modified notes. The
+  component id is unchanged, so existing layouts and custom titles keep
+  working.
+- Recently Updated / Recently Created: the folder parameter accepts multiple
+  comma-separated folders (ASCII or full-width) and nested paths such as
+  `000 Inbox/Clippings`; a folder match includes its subfolders. The edit-panel
+  folder field carries a hint.
+
 ## 1.1.2
 
 ### Changed
